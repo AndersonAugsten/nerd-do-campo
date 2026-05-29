@@ -696,8 +696,10 @@ const MENU = [
 ];
 
 export default function AdminAppCompleto() {
-  const [session, setSession]   = useState(null);
-  const [menu, setMenu]         = useState("partidas");
+  const [session, setSession]       = useState(SESSION_TOKEN ? {access_token: SESSION_TOKEN} : null);
+  const [idTime, setIdTime]         = useState(null);
+  const [isSuperadmin, setIsSuperadmin] = useState(false);
+  const [menu, setMenu]             = useState("partidas");
   const [partida, setPartida]   = useState(null);
   const [novaPartida, setNovaPartida] = useState(false);
   const { toast, show }         = useToast();
