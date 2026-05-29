@@ -354,79 +354,95 @@ function FormNovoTime({ onSalvo, show }) {
 }
 
 // ── FORM NOVO ADMIN ───────────────────────────────────────────
+// Fluxo em 2 passos:
+// 1. Super-admin cria o usuário manualmente no Supabase Auth
+// 2. Super-admin digita o e-mail aqui para vincular ao time
 function FormNovoAdmin({ time, onSalvo, show }) {
+  const [step, setStep]     = useState(1); // 1=instrucoes, 2=vincular
   const [email, setEmail]   = useState("");
-  const [senha, setSenha]   = useState("");
   const [saving, setSaving] = useState(false);
-  const [criado, setCriado] = useState(null);
+  const [vinculado, setVinculado] = useState(null);
 
-  async function criar() {
-    if (!email || !senha) { show("E-mail e senha são obrigatórios.", "error"); return; }
-    if (senha.length < 6)  { show("Senha deve ter ao menos 6 caracteres.", "error"); return; }
+  async function vincular() {
+    if (!email) { show("E-mail obrigatório.", "error"); return; }
     setSaving(true);
     try {
-      // Criar usuário via Supabase Admin API
-      const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
+      // Usar função RPC segura
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/criar_admin_time`, {
         method: "POST",
         headers: {
           apikey: SUPABASE_KEY,
           Authorization: `Bearer ${SESSION_TOKEN}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email, password: senha, email_confirm: true }),
+        body: JSON.stringify({ p_email: email, p_id_time: time.id_time, p_role: "admin" }),
       });
-      const user = await res.json();
-      if (!user.id) throw new Error(user.message || "Erro ao criar usuário");
-
-      // Vincular ao time
-      await api.post("usuario_time", { user_id: user.id, id_time: time.id_time, role: "admin" });
-
-      setCriado({ email, senha, time: time.nome });
+      const result = await res.json();
+      if (result.success) {
+        setVinculado({ email, time: time.nome });
+      } else {
+        show(result.error || "Erro ao vincular usuário.", "error");
+      }
     } catch(e) { show(e.message, "error"); }
     finally { setSaving(false); }
   }
 
-  if (criado) return (
+  if (vinculado) return (
     <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
       <div style={{ background:C.win+"22", border:`1px solid ${C.win}55`, borderRadius:10, padding:20, textAlign:"center" }}>
         <div style={{ fontSize:32, marginBottom:8 }}>✅</div>
-        <div style={{ fontWeight:700, color:C.win, fontSize:16, marginBottom:4 }}>Admin criado com sucesso!</div>
-        <div style={{ color:C.dim, fontSize:13 }}>Envie as credenciais abaixo para o time</div>
+        <div style={{ fontWeight:700, color:C.win, fontSize:16, marginBottom:4 }}>Admin vinculado com sucesso!</div>
+        <div style={{ color:C.dim, fontSize:13 }}>Envie os dados de acesso para o time</div>
       </div>
       <Card style={{ padding:20 }}>
-        <div style={{ fontSize:12, color:C.dim, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:12, fontWeight:700 }}>Credenciais de acesso</div>
+        <div style={{ fontSize:12, color:C.dim, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:12, fontWeight:700 }}>Dados de acesso</div>
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-          <div style={{ display:"flex", justifyContent:"space-between", padding:"10px 14px", background:C.surf2, borderRadius:8 }}>
-            <span style={{ color:C.dim }}>Time</span>
-            <span style={{ fontWeight:700, color:C.cream }}>{criado.time}</span>
-          </div>
-          <div style={{ display:"flex", justifyContent:"space-between", padding:"10px 14px", background:C.surf2, borderRadius:8 }}>
-            <span style={{ color:C.dim }}>URL</span>
-            <span style={{ fontWeight:700, color:C.gold }}>nerd-do-campo.vercel.app/admin</span>
-          </div>
-          <div style={{ display:"flex", justifyContent:"space-between", padding:"10px 14px", background:C.surf2, borderRadius:8 }}>
-            <span style={{ color:C.dim }}>E-mail</span>
-            <span style={{ fontWeight:700, color:C.cream }}>{criado.email}</span>
-          </div>
-          <div style={{ display:"flex", justifyContent:"space-between", padding:"10px 14px", background:C.surf2, borderRadius:8 }}>
-            <span style={{ color:C.dim }}>Senha</span>
-            <span style={{ fontWeight:700, color:C.cream }}>{criado.senha}</span>
-          </div>
+          {[
+            { label:"Time", value: vinculado.time, cor: C.cream },
+            { label:"URL",  value: "nerd-do-campo.vercel.app/admin", cor: C.gold },
+            { label:"E-mail", value: vinculado.email, cor: C.cream },
+          ].map(item => (
+            <div key={item.label} style={{ display:"flex", justifyContent:"space-between", padding:"10px 14px", background:C.surf2, borderRadius:8 }}>
+              <span style={{ color:C.dim }}>{item.label}</span>
+              <span style={{ fontWeight:700, color:item.cor }}>{item.value}</span>
+            </div>
+          ))}
         </div>
       </Card>
       <Btn onClick={onSalvo}>Concluir</Btn>
     </div>
   );
 
+  if (step === 1) return (
+    <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+      <div style={{ background:C.surf2, borderRadius:8, padding:"16px", fontSize:13, color:C.dim, lineHeight:1.6 }}>
+        <div style={{ fontWeight:700, color:C.gold, marginBottom:10, fontSize:14 }}>📋 Passo 1 de 2 — Criar o usuário no Supabase</div>
+        <div>Antes de vincular, você precisa criar o usuário no Supabase Auth:</div>
+        <ol style={{ paddingLeft:20, marginTop:8, display:"flex", flexDirection:"column", gap:6 }}>
+          <li>Acesse <strong style={{color:C.cream}}>supabase.com</strong> → seu projeto</li>
+          <li>Vá em <strong style={{color:C.cream}}>Authentication → Users</strong></li>
+          <li>Clique em <strong style={{color:C.cream}}>Add User</strong></li>
+          <li>Preencha e-mail e senha do admin do time</li>
+          <li>Clique <strong style={{color:C.cream}}>Create User</strong></li>
+        </ol>
+        <div style={{ marginTop:10, color:C.win }}>✅ Criou o usuário? Clique em Próximo.</div>
+      </div>
+      <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
+        <Btn onClick={() => setStep(2)}>Próximo →</Btn>
+      </div>
+    </div>
+  );
+
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
       <div style={{ background:C.surf2, borderRadius:8, padding:"12px 16px", fontSize:13, color:C.dim }}>
-        Criando admin para <strong style={{color:C.cream}}>{time.nome}</strong>. Este usuário só terá acesso aos dados deste time.
+        <div style={{ fontWeight:700, color:C.gold, marginBottom:6, fontSize:14 }}>📋 Passo 2 de 2 — Vincular ao time</div>
+        Vinculando admin ao time <strong style={{color:C.cream}}>{time.nome}</strong>.
       </div>
-      <Input label="E-mail do Admin *" type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="admin@juventusfc.com"/>
-      <Input label="Senha *" type="text" value={senha} onChange={e=>setSenha(e.target.value)} placeholder="Mínimo 6 caracteres"/>
-      <div style={{ display:"flex", justifyContent:"flex-end", gap:10, marginTop:8 }}>
-        <Btn onClick={criar} disabled={saving}>{saving?"Criando...":"Criar Admin"}</Btn>
+      <Input label="E-mail do Admin *" type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="email@exemplo.com"/>
+      <div style={{ display:"flex", justifyContent:"space-between", gap:10, marginTop:8 }}>
+        <Btn variant="secondary" onClick={() => setStep(1)}>← Voltar</Btn>
+        <Btn onClick={vincular} disabled={saving}>{saving?"Vinculando...":"Vincular ao Time"}</Btn>
       </div>
     </div>
   );
