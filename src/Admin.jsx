@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 const URL  = "https://nxztffulmvohduvudbhg.supabase.co";
 const ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im54enRmZnVsbXZvaGR1dnVkYmhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODY5ODMsImV4cCI6MjA5NTA2Mjk4M30.CwEmjukApMTJhkbKh1jlp4Q-IYrM26u-5SYx9p20nsg";
 
-let SESSION_TOKEN = null;
+let SESSION_TOKEN = sessionStorage.getItem("ndc_token") || null;
 
 async function sbAuth(path, body) {
   const res = await fetch(`${URL}/auth/v1/${path}`, {
@@ -158,7 +158,7 @@ function Login({ onLogin }) {
     setErro(""); setLoading(true);
     const res = await sbAuth("token?grant_type=password", { email, password: senha });
     setLoading(false);
-    if (res.access_token) { SESSION_TOKEN = res.access_token; onLogin(res); }
+    if (res.access_token) { SESSION_TOKEN = res.access_token; sessionStorage.setItem("ndc_token", res.access_token); onLogin(res); }
     else setErro("E-mail ou senha incorretos.");
   }
 
@@ -732,7 +732,7 @@ export default function AdminAppCompleto() {
               {(temporadas||[]).map(t=><option key={t.id_temporada} value={t.id_temporada}>{t.nome}</option>)}
             </select>
           )}
-          <Btn variant="danger" style={{ fontSize:11, padding:"6px 12px" }} onClick={() => { SESSION_TOKEN=null; setSession(null); }}>Sair</Btn>
+          <Btn variant="danger" style={{ fontSize:11, padding:"6px 12px" }} onClick={() => { SESSION_TOKEN=null; sessionStorage.removeItem("ndc_token"); setSession(null); }}>Sair</Btn>
         </div>
       </header>
 
@@ -795,6 +795,301 @@ export default function AdminAppCompleto() {
           {menu === "time"        && (<>{secTitle("Configurações do Time")}<ConfigTime show={show} /></>)}
         </main>
       </div>
+    </div>
+  );
+}
+
+
+// ── CRUD JOGADORES ────────────────────────────────────────────
+function CrudJogadores({ show }) {
+  const { data: jogadores, loading, reload } = useQuery(() => api.get(`jogador?id_jogador=gt.0&select=*,posicao(nome)&order=camisa.asc`));
+  const { data: posicoes } = useQuery(() => api.get(`posicao?id_posicao_pai=not.is.null&select=*&order=nome.asc`));
+  const [modal, setModal] = useState(null);
+  const [form, setForm]   = useState({});
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  function abrirNovo() { setForm({ nome:"", apelido:"", camisa:"", id_posicao:"", telefone:"", email:"", data_inicio:"", observacoes:"" }); setModal("novo"); }
+  function abrirEditar(j) { setForm({ ...j, id_posicao: j.id_posicao ? String(j.id_posicao) : "" }); setModal(j); }
+
+  async function salvar() {
+    if (!form.nome) { show("Nome obrigatório.", "error"); return; }
+    setSaving(true);
+    try {
+      const body = { nome: form.nome, apelido: form.apelido||null, camisa: form.camisa||null, id_posicao: form.id_posicao ? Number(form.id_posicao) : null, telefone: form.telefone||null, email: form.email||null, data_inicio: form.data_inicio||null, observacoes: form.observacoes||null };
+      if (modal === "novo") await api.post("jogador", body);
+      else await api.patch(`jogador?id_jogador=eq.${form.id_jogador}`, body);
+      show(modal === "novo" ? "Jogador criado!" : "Jogador atualizado!"); setModal(null); reload();
+    } catch (e) { show(e.message, "error"); } finally { setSaving(false); }
+  }
+
+  async function inativar(j) {
+    if (!confirm(`Inativar ${j.apelido || j.nome}?`)) return;
+    try { await api.patch(`jogador?id_jogador=eq.${j.id_jogador}`, { data_fim: new Date().toISOString().split("T")[0] }); show("Jogador inativado."); reload(); }
+    catch (e) { show(e.message, "error"); }
+  }
+
+  if (loading) return <Spinner />;
+  const ativos   = (jogadores||[]).filter(j => !j.data_fim);
+  const inativos = (jogadores||[]).filter(j =>  j.data_fim);
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+      <div style={{ display:"flex", justifyContent:"flex-end" }}><Btn onClick={abrirNovo}>+ Novo Jogador</Btn></div>
+      {[["Ativos", ativos], ["Inativos", inativos]].map(([grupo, lista]) => {
+        if (!lista.length) return null;
+        return (
+          <div key={grupo}>
+            <div style={{ fontSize:11, color:C.gold, textTransform:"uppercase", letterSpacing:"0.1em", fontWeight:700, marginBottom:10, borderLeft:`3px solid ${C.gold}`, paddingLeft:10 }}>{grupo} ({lista.length})</div>
+            <Card style={{ padding:0, overflow:"hidden" }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
+                <thead><tr style={{ background:C.surf2 }}>
+                  {["#","Nome","Apelido","Posição",""].map(h => <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontSize:11, color:C.dim, textTransform:"uppercase", fontWeight:700 }}>{h}</th>)}
+                </tr></thead>
+                <tbody>
+                  {lista.map((j,i) => (
+                    <tr key={j.id_jogador} style={{ background: i%2===0?C.surface:C.bg }}>
+                      <td style={{ padding:"11px 14px", fontWeight:800, color:C.gold }}>{j.camisa}</td>
+                      <td style={{ padding:"11px 14px", fontWeight:700 }}>{j.nome}</td>
+                      <td style={{ padding:"11px 14px", color:C.dim }}>{j.apelido || "—"}</td>
+                      <td style={{ padding:"11px 14px", color:C.dim, fontSize:13 }}>{j.posicao?.nome || "—"}</td>
+                      <td style={{ padding:"11px 14px", display:"flex", gap:8 }}>
+                        <Btn variant="secondary" style={{ fontSize:11, padding:"5px 10px" }} onClick={() => abrirEditar(j)}>Editar</Btn>
+                        {!j.data_fim && <Btn variant="danger" style={{ fontSize:11, padding:"5px 10px" }} onClick={() => inativar(j)}>Inativar</Btn>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+          </div>
+        );
+      })}
+      {modal && (
+        <Modal title={modal === "novo" ? "Novo Jogador" : "Editar Jogador"} onClose={() => setModal(null)}>
+          <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+              <Input label="Nome *" value={form.nome||""} onChange={e => set("nome", e.target.value)} />
+              <Input label="Apelido" value={form.apelido||""} onChange={e => set("apelido", e.target.value)} />
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+              <Input label="Camisa" value={form.camisa||""} onChange={e => set("camisa", e.target.value)} />
+              <Select label="Posição" value={form.id_posicao||""} onChange={e => set("id_posicao", e.target.value)}>
+                <option value="">Selecione...</option>
+                {(posicoes||[]).map(p => <option key={p.id_posicao} value={p.id_posicao}>{p.nome}</option>)}
+              </Select>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+              <Input label="Telefone" value={form.telefone||""} onChange={e => set("telefone", e.target.value)} />
+              <Input label="E-mail" type="email" value={form.email||""} onChange={e => set("email", e.target.value)} />
+            </div>
+            <Input label="Data de Início" type="date" value={form.data_inicio||""} onChange={e => set("data_inicio", e.target.value)} />
+            <Input label="Observações" value={form.observacoes||""} onChange={e => set("observacoes", e.target.value)} />
+            <div style={{ display:"flex", justifyContent:"flex-end", gap:10, marginTop:8 }}>
+              <Btn variant="secondary" onClick={() => setModal(null)}>Cancelar</Btn>
+              <Btn onClick={salvar} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ── CRUD ADVERSÁRIOS ──────────────────────────────────────────
+function CrudAdversarios({ show }) {
+  const { data: adversarios, loading, reload } = useQuery(() => api.get(`adversario?select=*,campo(nome),cidade(nome,estado)&order=nome.asc`));
+  const { data: campos }  = useQuery(() => api.get(`campo?select=*&order=nome.asc`));
+  const { data: cidades } = useQuery(() => api.get(`cidade?select=*&order=nome.asc`));
+  const [modal, setModal]   = useState(null);
+  const [form, setForm]     = useState({});
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  function abrirNovo() { setForm({ nome:"", id_campo:"", id_cidade:"", contato:"", observacoes:"" }); setModal("novo"); }
+  function abrirEditar(a) { setForm({ ...a, id_campo: a.id_campo?String(a.id_campo):"", id_cidade: a.id_cidade?String(a.id_cidade):"" }); setModal(a); }
+
+  async function salvar() {
+    if (!form.nome) { show("Nome obrigatório.", "error"); return; }
+    setSaving(true);
+    try {
+      const body = { nome: form.nome, id_campo: form.id_campo?Number(form.id_campo):null, id_cidade: form.id_cidade?Number(form.id_cidade):null, contato: form.contato||null, observacoes: form.observacoes||null };
+      if (modal === "novo") await api.post("adversario", body);
+      else await api.patch(`adversario?id_adversario=eq.${form.id_adversario}`, body);
+      show("Salvo!"); setModal(null); reload();
+    } catch (e) { show(e.message, "error"); } finally { setSaving(false); }
+  }
+
+  if (loading) return <Spinner />;
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+      <div style={{ display:"flex", justifyContent:"flex-end" }}><Btn onClick={abrirNovo}>+ Novo Adversário</Btn></div>
+      <Card style={{ padding:0, overflow:"hidden" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
+          <thead><tr style={{ background:C.surf2 }}>
+            {["Nome","Campo","Cidade","Contato",""].map(h => <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontSize:11, color:C.dim, textTransform:"uppercase", fontWeight:700 }}>{h}</th>)}
+          </tr></thead>
+          <tbody>
+            {(adversarios||[]).filter(a=>!a.data_fim).map((a,i) => (
+              <tr key={a.id_adversario} style={{ background: i%2===0?C.surface:C.bg }}>
+                <td style={{ padding:"11px 14px", fontWeight:700 }}>{a.nome}</td>
+                <td style={{ padding:"11px 14px", color:C.dim, fontSize:13 }}>{a.campo?.nome || "—"}</td>
+                <td style={{ padding:"11px 14px", color:C.dim, fontSize:13 }}>{a.cidade ? `${a.cidade.nome}/${a.cidade.estado}` : "—"}</td>
+                <td style={{ padding:"11px 14px", color:C.dim, fontSize:13 }}>{a.contato || "—"}</td>
+                <td style={{ padding:"11px 14px" }}><Btn variant="secondary" style={{ fontSize:11, padding:"5px 10px" }} onClick={() => abrirEditar(a)}>Editar</Btn></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
+      {modal && (
+        <Modal title={modal === "novo" ? "Novo Adversário" : "Editar Adversário"} onClose={() => setModal(null)}>
+          <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+            <Input label="Nome *" value={form.nome||""} onChange={e => set("nome", e.target.value)} />
+            <Select label="Campo" value={form.id_campo||""} onChange={e => set("id_campo", e.target.value)}>
+              <option value="">Selecione...</option>
+              {(campos||[]).map(c => <option key={c.id_campo} value={c.id_campo}>{c.nome}</option>)}
+            </Select>
+            <Select label="Cidade" value={form.id_cidade||""} onChange={e => set("id_cidade", e.target.value)}>
+              <option value="">Selecione...</option>
+              {(cidades||[]).map(c => <option key={c.id_cidade} value={c.id_cidade}>{c.nome}/{c.estado}</option>)}
+            </Select>
+            <Input label="Contato" value={form.contato||""} onChange={e => set("contato", e.target.value)} />
+            <Input label="Observações" value={form.observacoes||""} onChange={e => set("observacoes", e.target.value)} />
+            <div style={{ display:"flex", justifyContent:"flex-end", gap:10, marginTop:8 }}>
+              <Btn variant="secondary" onClick={() => setModal(null)}>Cancelar</Btn>
+              <Btn onClick={salvar} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ── CRUD CAMPOS ───────────────────────────────────────────────
+function CrudCampos({ show }) {
+  const { data: campos, loading, reload } = useQuery(() => api.get(`campo?select=*,cidade(nome,estado)&order=nome.asc`));
+  const { data: cidades } = useQuery(() => api.get(`cidade?select=*&order=nome.asc`));
+  const [modal, setModal]   = useState(null);
+  const [form, setForm]     = useState({});
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  function abrirNovo() { setForm({ nome:"", endereco:"", id_cidade:"", observacoes:"" }); setModal("novo"); }
+  function abrirEditar(c) { setForm({ ...c, id_cidade: c.id_cidade?String(c.id_cidade):"" }); setModal(c); }
+
+  async function salvar() {
+    if (!form.nome) { show("Nome obrigatório.", "error"); return; }
+    setSaving(true);
+    try {
+      const body = { nome: form.nome, endereco: form.endereco||null, id_cidade: form.id_cidade?Number(form.id_cidade):null, observacoes: form.observacoes||null };
+      if (modal === "novo") await api.post("campo", body);
+      else await api.patch(`campo?id_campo=eq.${form.id_campo}`, body);
+      show("Salvo!"); setModal(null); reload();
+    } catch (e) { show(e.message, "error"); } finally { setSaving(false); }
+  }
+
+  if (loading) return <Spinner />;
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+      <div style={{ display:"flex", justifyContent:"flex-end" }}><Btn onClick={abrirNovo}>+ Novo Campo</Btn></div>
+      <Card style={{ padding:0, overflow:"hidden" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
+          <thead><tr style={{ background:C.surf2 }}>
+            {["Nome","Endereço","Cidade",""].map(h => <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontSize:11, color:C.dim, textTransform:"uppercase", fontWeight:700 }}>{h}</th>)}
+          </tr></thead>
+          <tbody>
+            {(campos||[]).filter(c=>!c.data_fim).map((c,i) => (
+              <tr key={c.id_campo} style={{ background: i%2===0?C.surface:C.bg }}>
+                <td style={{ padding:"11px 14px", fontWeight:700 }}>{c.nome}</td>
+                <td style={{ padding:"11px 14px", color:C.dim, fontSize:13 }}>{c.endereco || "—"}</td>
+                <td style={{ padding:"11px 14px", color:C.dim, fontSize:13 }}>{c.cidade ? `${c.cidade.nome}/${c.cidade.estado}` : "—"}</td>
+                <td style={{ padding:"11px 14px" }}><Btn variant="secondary" style={{ fontSize:11, padding:"5px 10px" }} onClick={() => abrirEditar(c)}>Editar</Btn></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
+      {modal && (
+        <Modal title={modal === "novo" ? "Novo Campo" : "Editar Campo"} onClose={() => setModal(null)}>
+          <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+            <Input label="Nome *" value={form.nome||""} onChange={e => set("nome", e.target.value)} />
+            <Input label="Endereço" value={form.endereco||""} onChange={e => set("endereco", e.target.value)} />
+            <Select label="Cidade" value={form.id_cidade||""} onChange={e => set("id_cidade", e.target.value)}>
+              <option value="">Selecione...</option>
+              {(cidades||[]).map(c => <option key={c.id_cidade} value={c.id_cidade}>{c.nome}/{c.estado}</option>)}
+            </Select>
+            <Input label="Observações" value={form.observacoes||""} onChange={e => set("observacoes", e.target.value)} />
+            <div style={{ display:"flex", justifyContent:"flex-end", gap:10, marginTop:8 }}>
+              <Btn variant="secondary" onClick={() => setModal(null)}>Cancelar</Btn>
+              <Btn onClick={salvar} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ── CRUD CIDADES ──────────────────────────────────────────────
+function CrudCidades({ show }) {
+  const { data: cidades, loading, reload } = useQuery(() => api.get(`cidade?select=*&order=nome.asc`));
+  const [modal, setModal]   = useState(null);
+  const [form, setForm]     = useState({});
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  function abrirNovo() { setForm({ nome:"", estado:"", observacoes:"" }); setModal("novo"); }
+  function abrirEditar(c) { setForm({ ...c }); setModal(c); }
+
+  async function salvar() {
+    if (!form.nome) { show("Nome obrigatório.", "error"); return; }
+    setSaving(true);
+    try {
+      const body = { nome: form.nome, estado: form.estado||null, observacoes: form.observacoes||null };
+      if (modal === "novo") await api.post("cidade", body);
+      else await api.patch(`cidade?id_cidade=eq.${form.id_cidade}`, body);
+      show("Salvo!"); setModal(null); reload();
+    } catch (e) { show(e.message, "error"); } finally { setSaving(false); }
+  }
+
+  if (loading) return <Spinner />;
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+      <div style={{ display:"flex", justifyContent:"flex-end" }}><Btn onClick={abrirNovo}>+ Nova Cidade</Btn></div>
+      <Card style={{ padding:0, overflow:"hidden" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
+          <thead><tr style={{ background:C.surf2 }}>
+            {["Cidade","Estado",""].map(h => <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontSize:11, color:C.dim, textTransform:"uppercase", fontWeight:700 }}>{h}</th>)}
+          </tr></thead>
+          <tbody>
+            {(cidades||[]).map((c,i) => (
+              <tr key={c.id_cidade} style={{ background: i%2===0?C.surface:C.bg }}>
+                <td style={{ padding:"11px 14px", fontWeight:700 }}>{c.nome}</td>
+                <td style={{ padding:"11px 14px", color:C.dim }}>{c.estado || "—"}</td>
+                <td style={{ padding:"11px 14px" }}><Btn variant="secondary" style={{ fontSize:11, padding:"5px 10px" }} onClick={() => abrirEditar(c)}>Editar</Btn></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
+      {modal && (
+        <Modal title={modal === "novo" ? "Nova Cidade" : "Editar Cidade"} onClose={() => setModal(null)}>
+          <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+            <Input label="Nome *" value={form.nome||""} onChange={e => set("nome", e.target.value)} />
+            <Input label="Estado (UF)" value={form.estado||""} onChange={e => set("estado", e.target.value.toUpperCase().slice(0,2))} placeholder="RS" />
+            <Input label="Observações" value={form.observacoes||""} onChange={e => set("observacoes", e.target.value)} />
+            <div style={{ display:"flex", justifyContent:"flex-end", gap:10, marginTop:8 }}>
+              <Btn variant="secondary" onClick={() => setModal(null)}>Cancelar</Btn>
+              <Btn onClick={salvar} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
