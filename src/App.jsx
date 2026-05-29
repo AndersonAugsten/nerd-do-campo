@@ -197,20 +197,22 @@ function VisaoGeral({ temporada }) {
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
+      <style>{`.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}@media(max-width:480px){.stat-grid{grid-template-columns:repeat(2,1fr)}}`}</style>
+      <div className="stat-grid">
         <StatCard label="Jogos" value={jogadas.length}/>
         <StatCard label="Vitórias" value={v} cor={C.win}/>
         <StatCard label="Empates" value={e} cor={C.draw}/>
         <StatCard label="Derrotas" value={d} cor={C.loss}/>
       </div>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
+      <div className="stat-grid">
         <StatCard label="Pontos" value={pts} cor={C.gold}/>
         <StatCard label="Gols Pró" value={gm}/>
         <StatCard label="Gols Contra" value={gs} cor={C.dim}/>
         <StatCard label="Aproveit." value={`${pct}%`} cor={pct>=60?C.win:pct>=40?C.draw:C.loss}/>
       </div>
 
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+      <style>{`.duo-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:480px){.duo-grid{grid-template-columns:1fr}}`}</style>
+      <div className="duo-grid">
         <Card>
           <SecTitle accent>Último Jogo</SecTitle>
           {ultima ? (<>
@@ -236,7 +238,7 @@ function VisaoGeral({ temporada }) {
         </Card>
       </div>
 
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+      <div className="duo-grid">
         <Card><SecTitle accent>⚽ Artilheiros</SecTitle><RankList items={topGols} valKey="gols_marcados" cor={C.gold}/></Card>
         <Card><SecTitle accent>🅰️ Assistências</SecTitle><RankList items={topAssist} valKey="assistencias" cor={C.win}/></Card>
       </div>
@@ -513,19 +515,20 @@ function TimeApp({ time, onVoltar }) {
       </header>
 
       {temporadaSel && (
-        <div style={{ background:"linear-gradient(135deg,#103D2A 0%,#174D36 50%,#1A5C40 100%)", borderBottom:`1px solid ${C.border}`, padding:"16px 24px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:20 }}>
-          <div>
-            <div style={{ fontSize:11, color:C.gold, textTransform:"uppercase", letterSpacing:"0.12em", marginBottom:2 }}>{temporadaSel.nome}</div>
-            <div style={{ fontSize:22, fontWeight:800, textTransform:"uppercase" }}>{time.nome}</div>
-            <div style={{ fontSize:12, color:C.dim, marginTop:3 }}>
-              {temporadaSel.tecnico && <>Técnico: <strong style={{color:C.cream}}>{temporadaSel.tecnico}</strong> · </>}
+        <div style={{ background:"linear-gradient(135deg,#103D2A 0%,#174D36 50%,#1A5C40 100%)", borderBottom:`1px solid ${C.border}`, padding:"12px 16px" }}>
+          <div style={{ fontSize:10, color:C.gold, textTransform:"uppercase", letterSpacing:"0.12em", marginBottom:2 }}>{temporadaSel.nome}</div>
+          <div style={{ fontSize:18, fontWeight:800, textTransform:"uppercase", lineHeight:1.2 }}>{time.nome}</div>
+          {(temporadaSel.tecnico || temporadaSel.presidente) && (
+            <div style={{ fontSize:11, color:C.dim, marginTop:3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+              {temporadaSel.tecnico && <>Técnico: <strong style={{color:C.cream}}>{temporadaSel.tecnico}</strong></>}
+              {temporadaSel.tecnico && temporadaSel.presidente && " · "}
               {temporadaSel.presidente && <>Presidente: <strong style={{color:C.cream}}>{temporadaSel.presidente}</strong></>}
             </div>
-          </div>
+          )}
         </div>
       )}
 
-      <main style={{ maxWidth:1200, margin:"0 auto", padding:"28px 24px" }}>
+      <main style={{ maxWidth:1200, margin:"0 auto", padding:"16px 12px" }}>
         {screens[tab]}
       </main>
 
