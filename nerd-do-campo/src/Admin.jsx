@@ -679,7 +679,7 @@ function FormGol({ partida, participacoes, jogadores, onSalvo, show }) {
 }
 
 // ── APP ADMIN ─────────────────────────────────────────────────
-export default function AdminApp() {
+function AdminApp() {
   const [session, setSession]         = useState(null);
   const [partida, setPartida]         = useState(null);
   const [novaPartida, setNovaPartida] = useState(false);
@@ -1080,7 +1080,7 @@ const MENU = [
   { id:"time",        label:"Meu Time",    icon:"⚙️", grupo:"Configurações" },
 ];
 
-export function AdminAppCompleto() {
+export default function AdminAppCompleto() {
   const [session, setSession]   = useState(null);
   const [menu, setMenu]         = useState("partidas");
   const [partida, setPartida]   = useState(null);

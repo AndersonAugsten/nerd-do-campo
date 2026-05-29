@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import AdminAppCompleto from './Admin';
 import App from './App';
-import { AdminAppCompleto } from './Admin';
 
 const isAdmin = window.location.pathname.startsWith('/admin');
 
