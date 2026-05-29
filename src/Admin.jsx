@@ -679,6 +679,17 @@ function FormGol({ partida, participacoes, jogadores, onSalvo, show }) {
 }
 
 // ── APP ADMIN ─────────────────────────────────────────────────
+const MENU = [
+  { id:"partidas",    label:"Partidas",    icon:"📅", grupo:"Jogos" },
+  { id:"jogadores",   label:"Jogadores",   icon:"👕", grupo:"Cadastros" },
+  { id:"adversarios", label:"Adversários", icon:"⚔️", grupo:"Cadastros" },
+  { id:"campos",      label:"Campos",      icon:"🏟️", grupo:"Cadastros" },
+  { id:"cidades",     label:"Cidades",     icon:"📍", grupo:"Cadastros" },
+  { id:"posicoes",    label:"Posições",    icon:"🎯", grupo:"Cadastros" },
+  { id:"temporadas",  label:"Temporadas",  icon:"📆", grupo:"Configurações" },
+  { id:"time",        label:"Meu Time",    icon:"⚙️", grupo:"Configurações" },
+];
+
 export default function AdminAppCompleto() {
   const [session, setSession]   = useState(null);
   const [menu, setMenu]         = useState("partidas");
