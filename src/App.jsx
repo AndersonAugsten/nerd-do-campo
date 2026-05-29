@@ -6,11 +6,7 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 async function sb(path) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      "Content-Type": "application/json",
-    },
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json" },
   });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
@@ -18,19 +14,11 @@ async function sb(path) {
 
 // ── Paleta ────────────────────────────────────────────────────
 const C = {
-  bg:      "#0B3D2E",
-  surface: "#103D2A",
-  surf2:   "#174D36",
-  border:  "#1F5C3E",
-  gold:    "#E8A020",
-  cream:   "#F0E8D0",
-  dim:     "#8FAF9A",
-  win:     "#4CAF50",
-  draw:    "#E8A020",
-  loss:    "#E53935",
+  bg: "#0B3D2E", surface: "#103D2A", surf2: "#174D36",
+  border: "#1F5C3E", gold: "#E8A020", cream: "#F0E8D0",
+  dim: "#8FAF9A", win: "#4CAF50", loss: "#E53935", draw: "#E8A020",
 };
 
-// ── Logo ──────────────────────────────────────────────────────
 function Logo({ size = 44 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
@@ -40,7 +28,6 @@ function Logo({ size = 44 }) {
       <rect x="26" y="30" width="36" height="38" rx="1" stroke="#F0E8D0" strokeWidth="1.5" fill="none"/>
       <line x1="44" y1="30" x2="44" y2="68" stroke="#F0E8D0" strokeWidth="1"/>
       <line x1="26" y1="49" x2="62" y2="49" stroke="#F0E8D0" strokeWidth="1"/>
-      <rect x="35" y="56" width="10" height="10" stroke="#F0E8D0" strokeWidth="1" fill="none"/>
       <circle cx="70" cy="65" r="18" fill="#1A1A1A"/>
       <circle cx="63" cy="62" r="5" fill="#F0E8D0"/>
       <circle cx="77" cy="62" r="5" fill="#F0E8D0"/>
@@ -50,11 +37,9 @@ function Logo({ size = 44 }) {
   );
 }
 
-// ── Atoms ─────────────────────────────────────────────────────
 function Card({ children, style: s = {} }) {
   return <div style={{ background: C.surface, borderRadius: 12, padding: "20px 24px", border: `1px solid ${C.border}`, ...s }}>{children}</div>;
 }
-
 function SecTitle({ children, accent }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
@@ -63,40 +48,23 @@ function SecTitle({ children, accent }) {
     </div>
   );
 }
-
 function Badge({ label, cor }) {
-  return (
-    <span style={{ background: cor + "22", color: cor, border: `1px solid ${cor}55`, borderRadius: 6, padding: "2px 10px", fontSize: 12, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-      {label}
-    </span>
-  );
+  return <span style={{ background: cor+"22", color: cor, border:`1px solid ${cor}55`, borderRadius:6, padding:"2px 8px", fontSize:11, fontWeight:700, textTransform:"uppercase" }}>{label}</span>;
 }
-
 function Spinner() {
   return (
-    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: 80, flexDirection: "column", gap: 16 }}>
-      <div style={{ width: 44, height: 44, border: `3px solid ${C.border}`, borderTop: `3px solid ${C.gold}`, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-      <div style={{ color: C.dim, fontSize: 13, textTransform: "uppercase", letterSpacing: "0.1em" }}>Carregando...</div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    <div style={{ display:"flex", justifyContent:"center", alignItems:"center", padding:80, flexDirection:"column", gap:16 }}>
+      <div style={{ width:44, height:44, border:`3px solid ${C.border}`, borderTop:`3px solid ${C.gold}`, borderRadius:"50%", animation:"spin 0.8s linear infinite" }}/>
+      <div style={{ color:C.dim, fontSize:13, textTransform:"uppercase", letterSpacing:"0.1em" }}>Carregando...</div>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 }
 
-function ErrMsg({ msg }) {
-  return (
-    <Card style={{ border: `1px solid ${C.loss}44`, textAlign: "center", padding: 48 }}>
-      <div style={{ fontSize: 36, marginBottom: 12 }}>⚠️</div>
-      <div style={{ color: C.loss, fontWeight: 700, marginBottom: 8, fontSize: 16 }}>Erro ao carregar dados</div>
-      <div style={{ color: C.dim, fontSize: 13, maxWidth: 400, margin: "0 auto" }}>{msg}</div>
-    </Card>
-  );
-}
-
-// ── Hook ──────────────────────────────────────────────────────
 function useQuery(fetcher, deps = []) {
-  const [data, setData]       = useState(null);
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState(null);
+  const [error, setError] = useState(null);
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try { setData(await fetcher()); }
@@ -107,61 +75,75 @@ function useQuery(fetcher, deps = []) {
   return { data, loading, error };
 }
 
-// ── Helpers ───────────────────────────────────────────────────
 function resultado(p) {
-  if (p.cancelada === "S")        return { label: "Cancelado", cor: C.dim };
-  if (p.gols_marcados === null)   return { label: "Pendente",  cor: C.dim };
-  if (p.gols_marcados > p.gols_sofridos) return { label: "Vitória", cor: C.win };
-  if (p.gols_marcados < p.gols_sofridos) return { label: "Derrota", cor: C.loss };
-  return { label: "Empate", cor: C.draw };
+  if (p.cancelada === "S") return { label:"Cancelado", cor:C.dim };
+  if (p.gols_marcados === null) return { label:"Pendente", cor:C.dim };
+  if (p.gols_marcados > p.gols_sofridos) return { label:"Vitória", cor:C.win };
+  if (p.gols_marcados < p.gols_sofridos) return { label:"Derrota", cor:C.loss };
+  return { label:"Empate", cor:C.draw };
 }
+function fmtData(ts) { return ts ? new Date(ts).toLocaleDateString("pt-BR") : "—"; }
+function fmtHora(ts) { return ts ? new Date(ts).toLocaleTimeString("pt-BR", { hour:"2-digit", minute:"2-digit" }) : "—"; }
 
-function fmtData(ts) {
-  if (!ts) return "—";
-  return new Date(ts).toLocaleDateString("pt-BR");
-}
+// ── SELETOR DE TIMES ──────────────────────────────────────────
+function SeletorTimes({ onSelect }) {
+  const { data: times, loading } = useQuery(() => sb(`time?select=*,temporada(nome,data_inicio,data_fim)&data_fim=is.null&order=nome.asc`));
 
-function fmtHora(ts) {
-  if (!ts) return "—";
-  return new Date(ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-}
+  if (loading) return (
+    <div style={{ minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'Oswald','Arial Narrow',Arial,sans-serif" }}>
+      <Spinner />
+    </div>
+  );
 
-// ── Tabela genérica ───────────────────────────────────────────
-function Tabela({ cols, rows, keyFn }) {
   return (
-    <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-        <thead>
-          <tr style={{ background: C.surf2 }}>
-            {cols.map(c => (
-              <th key={c.label} style={{ padding: "12px 14px", textAlign: c.align || "left", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", color: C.dim, fontWeight: 700, whiteSpace: "nowrap" }}>
-                {c.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, i) => (
-            <tr key={keyFn ? keyFn(row) : i}
-              style={{ background: i % 2 === 0 ? C.surface : C.bg, cursor: "default" }}
-              onMouseEnter={e => e.currentTarget.style.background = C.surf2}
-              onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? C.surface : C.bg}>
-              {cols.map(c => (
-                <td key={c.label} style={{ padding: "12px 14px", textAlign: c.align || "left", ...(c.style || {}) }}>
-                  {c.render ? c.render(row) : row[c.key] ?? "—"}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"'Oswald','Arial Narrow',Arial,sans-serif", color:C.cream }}>
+      <header style={{ background:"#091F15", borderBottom:`3px solid ${C.gold}`, padding:"0 24px", display:"flex", alignItems:"center", gap:16, height:68, boxShadow:"0 4px 20px #00000066" }}>
+        <Logo size={42}/>
+        <div>
+          <div style={{ fontSize:20, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:C.cream, lineHeight:1 }}>Nerd do Campo</div>
+          <div style={{ fontSize:11, color:C.gold, letterSpacing:"0.1em", textTransform:"uppercase" }}>Estatísticas de Futebol Amador</div>
+        </div>
+      </header>
+
+      <main style={{ maxWidth:900, margin:"0 auto", padding:"60px 24px" }}>
+        <div style={{ textAlign:"center", marginBottom:48 }}>
+          <div style={{ fontSize:32, fontWeight:800, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:12 }}>
+            Escolha um Time
+          </div>
+          <div style={{ fontSize:15, color:C.dim }}>Selecione o time para ver as estatísticas da temporada</div>
+        </div>
+
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(260px,1fr))", gap:16 }}>
+          {(times||[]).map(t => {
+            const temp = t.temporada?.[0];
+            return (
+              <div key={t.id_time}
+                onClick={() => onSelect(t)}
+                style={{ background:C.surface, borderRadius:16, padding:"28px 24px", border:`1px solid ${C.border}`, cursor:"pointer", transition:"all 0.2s", textAlign:"center" }}
+                onMouseEnter={e => { e.currentTarget.style.background = C.surf2; e.currentTarget.style.borderColor = C.gold; e.currentTarget.style.transform = "translateY(-2px)"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = C.surface; e.currentTarget.style.borderColor = C.border; e.currentTarget.style.transform = "none"; }}>
+                <div style={{ width:72, height:72, borderRadius:"50%", background:C.surf2, border:`2px solid ${C.gold}`, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 16px", fontSize:28 }}>
+                  ⚽
+                </div>
+                <div style={{ fontSize:18, fontWeight:800, textTransform:"uppercase", marginBottom:6 }}>{t.nome}</div>
+                {temp && <div style={{ fontSize:12, color:C.gold, textTransform:"uppercase", letterSpacing:"0.08em" }}>{temp.nome}</div>}
+                {t.data_fundacao && <div style={{ fontSize:11, color:C.dim, marginTop:4 }}>Fundado em {new Date(t.data_fundacao).getFullYear()}</div>}
+              </div>
+            );
+          })}
+        </div>
+      </main>
+
+      <footer style={{ textAlign:"center", padding:"20px", color:C.dim, fontSize:12, borderTop:`1px solid ${C.border}`, marginTop:40 }}>
+        ⚽ Nerd do Campo — Estatísticas de Futebol Amador
+      </footer>
     </div>
   );
 }
 
 // ── VISÃO GERAL ───────────────────────────────────────────────
 function VisaoGeral({ temporada }) {
-  const { data: partidas, loading, error } = useQuery(
+  const { data: partidas, loading } = useQuery(
     () => sb(`partida?id_temporada=eq.${temporada.id_temporada}&select=*,adversario(nome),campo(nome)&order=data.asc`),
     [temporada.id_temporada]
   );
@@ -169,42 +151,42 @@ function VisaoGeral({ temporada }) {
   const { data: topAssist } = useQuery(() => sb(`vw_estatisticas_jogadores?assistencias=not.is.null&order=assistencias.desc&limit=5`), []);
 
   if (loading) return <Spinner />;
-  if (error)   return <ErrMsg msg={error} />;
 
-  const jogadas = (partidas || []).filter(p => p.cancelada !== "S" && p.gols_marcados !== null);
+  const jogadas = (partidas||[]).filter(p => p.cancelada !== "S" && p.gols_marcados !== null);
   const v  = jogadas.filter(p => p.gols_marcados > p.gols_sofridos).length;
   const e  = jogadas.filter(p => p.gols_marcados === p.gols_sofridos).length;
   const d  = jogadas.filter(p => p.gols_marcados < p.gols_sofridos).length;
-  const gm = jogadas.reduce((a, p) => a + (p.gols_marcados || 0), 0);
-  const gs = jogadas.reduce((a, p) => a + (p.gols_sofridos || 0), 0);
-  const pts = v * 3 + e;
-  const pct = jogadas.length > 0 ? Math.round((v / jogadas.length) * 100) : 0;
+  const gm = jogadas.reduce((a,p) => a + (p.gols_marcados||0), 0);
+  const gs = jogadas.reduce((a,p) => a + (p.gols_sofridos||0), 0);
+  const pts = v*3+e;
+  const pct = jogadas.length > 0 ? Math.round((v/jogadas.length)*100) : 0;
   const ultima  = [...jogadas].reverse()[0];
-  const proxima = (partidas || []).find(p => p.cancelada !== "S" && p.gols_marcados === null);
+  const proxima = (partidas||[]).find(p => p.cancelada !== "S" && p.gols_marcados === null);
+  const maxGols   = topGols?.[0]?.gols_marcados || 1;
+  const maxAssist = topAssist?.[0]?.assistencias || 1;
 
   const StatCard = ({ label, value, cor }) => (
-    <Card style={{ textAlign: "center", padding: "18px 10px" }}>
-      <div style={{ fontSize: 36, fontWeight: 800, color: cor || C.gold, lineHeight: 1 }}>{value}</div>
-      <div style={{ fontSize: 11, color: C.dim, marginTop: 6, textTransform: "uppercase", letterSpacing: "0.1em" }}>{label}</div>
+    <Card style={{ textAlign:"center", padding:"18px 10px" }}>
+      <div style={{ fontSize:36, fontWeight:800, color:cor||C.gold, lineHeight:1 }}>{value}</div>
+      <div style={{ fontSize:11, color:C.dim, marginTop:6, textTransform:"uppercase", letterSpacing:"0.1em" }}>{label}</div>
     </Card>
   );
 
-  const RankList = ({ items, valKey, cor, emptyMsg }) => {
+  const RankList = ({ items, valKey, cor }) => {
     const max = items?.[0]?.[valKey] || 1;
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {(items || []).length === 0 && <div style={{ color: C.dim, fontSize: 13 }}>{emptyMsg}</div>}
-        {(items || []).map((j, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 13, color: cor, fontWeight: 800, width: 18, textAlign: "center" }}>{i + 1}</span>
-            <div style={{ width: 34, height: 34, borderRadius: "50%", background: C.surf2, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, color: cor, fontSize: 13 }}>{j.camisa || "?"}</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 700, fontSize: 13 }}>{j.jogador}</div>
-              <div style={{ fontSize: 11, color: C.dim }}>{j.posicao}</div>
+      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        {(items||[]).map((j,i) => (
+          <div key={i} style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <span style={{ fontSize:13, color:cor, fontWeight:800, width:18, textAlign:"center" }}>{i+1}</span>
+            <div style={{ width:34, height:34, borderRadius:"50%", background:C.surf2, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, color:cor, fontSize:13 }}>{j.camisa||"?"}</div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontWeight:700, fontSize:13 }}>{j.jogador}</div>
+              <div style={{ fontSize:11, color:C.dim }}>{j.posicao}</div>
             </div>
-            <span style={{ fontSize: 22, fontWeight: 800, color: cor }}>{j[valKey]}</span>
-            <div style={{ width: 60, height: 5, background: C.surf2, borderRadius: 3, overflow: "hidden" }}>
-              <div style={{ width: `${(j[valKey] / max) * 100}%`, height: "100%", background: cor, borderRadius: 3 }} />
+            <span style={{ fontSize:22, fontWeight:800, color:cor }}>{j[valKey]}</span>
+            <div style={{ width:60, height:5, background:C.surf2, borderRadius:3, overflow:"hidden" }}>
+              <div style={{ width:`${(j[valKey]/max)*100}%`, height:"100%", background:cor, borderRadius:3 }}/>
             </div>
           </div>
         ))}
@@ -213,55 +195,49 @@ function VisaoGeral({ temporada }) {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }}>
-        <StatCard label="Jogos"    value={jogadas.length} />
-        <StatCard label="Vitórias" value={v}   cor={C.win} />
-        <StatCard label="Empates"  value={e}   cor={C.draw} />
-        <StatCard label="Derrotas" value={d}   cor={C.loss} />
+    <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
+        <StatCard label="Jogos" value={jogadas.length}/>
+        <StatCard label="Vitórias" value={v} cor={C.win}/>
+        <StatCard label="Empates" value={e} cor={C.draw}/>
+        <StatCard label="Derrotas" value={d} cor={C.loss}/>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }}>
-        <StatCard label="Pontos"       value={pts} cor={C.gold} />
-        <StatCard label="Gols Pró"     value={gm} />
-        <StatCard label="Gols Contra"  value={gs}  cor={C.dim} />
-        <StatCard label="Aproveit."    value={`${pct}%`} cor={pct >= 60 ? C.win : pct >= 40 ? C.draw : C.loss} />
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
+        <StatCard label="Pontos" value={pts} cor={C.gold}/>
+        <StatCard label="Gols Pró" value={gm}/>
+        <StatCard label="Gols Contra" value={gs} cor={C.dim}/>
+        <StatCard label="Aproveit." value={`${pct}%`} cor={pct>=60?C.win:pct>=40?C.draw:C.loss}/>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
         <Card>
           <SecTitle accent>Último Jogo</SecTitle>
           {ultima ? (<>
-            <div style={{ fontSize: 13, color: C.dim, marginBottom: 4 }}>{fmtData(ultima.data)} · {ultima.em_casa === "S" ? "Em Casa" : "Fora"}</div>
-            <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>{ultima.adversario?.nome}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <span style={{ fontSize: 32, fontWeight: 800, color: C.gold }}>{ultima.gols_marcados} × {ultima.gols_sofridos}</span>
-              <Badge {...resultado(ultima)} />
+            <div style={{ fontSize:13, color:C.dim, marginBottom:4 }}>{fmtData(ultima.data)} · {ultima.em_casa==="S"?"Em Casa":"Fora"}</div>
+            <div style={{ fontSize:20, fontWeight:700, marginBottom:8 }}>{ultima.adversario?.nome}</div>
+            <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+              <span style={{ fontSize:32, fontWeight:800, color:C.gold }}>{ultima.gols_marcados} × {ultima.gols_sofridos}</span>
+              <Badge {...resultado(ultima)}/>
             </div>
-            <div style={{ fontSize: 12, color: C.dim, marginTop: 6 }}>🏟️ {ultima.campo?.nome}</div>
-          </>) : <div style={{ color: C.dim }}>Nenhum jogo realizado ainda</div>}
+            <div style={{ fontSize:12, color:C.dim, marginTop:6 }}>🏟️ {ultima.campo?.nome}</div>
+          </>) : <div style={{color:C.dim}}>Nenhum jogo realizado ainda</div>}
         </Card>
         <Card>
           <SecTitle accent>Próximo Jogo</SecTitle>
           {proxima ? (<>
-            <div style={{ fontSize: 13, color: C.dim, marginBottom: 4 }}>{fmtData(proxima.data)} · {fmtHora(proxima.data)} · {proxima.em_casa === "S" ? "Em Casa" : "Fora"}</div>
-            <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>{proxima.adversario?.nome || "A definir"}</div>
-            <div style={{ fontSize: 12, color: C.dim }}>🏟️ {proxima.campo?.nome}</div>
-            <div style={{ marginTop: 12, padding: "8px 14px", background: C.gold + "22", border: `1px solid ${C.gold}55`, borderRadius: 8, display: "inline-block" }}>
-              <span style={{ color: C.gold, fontWeight: 700, fontSize: 13 }}>⏰ Aguardando</span>
+            <div style={{ fontSize:13, color:C.dim, marginBottom:4 }}>{fmtData(proxima.data)} · {fmtHora(proxima.data)} · {proxima.em_casa==="S"?"Em Casa":"Fora"}</div>
+            <div style={{ fontSize:20, fontWeight:700, marginBottom:8 }}>{proxima.adversario?.nome||"A definir"}</div>
+            <div style={{ fontSize:12, color:C.dim }}>🏟️ {proxima.campo?.nome}</div>
+            <div style={{ marginTop:12, padding:"8px 14px", background:C.gold+"22", border:`1px solid ${C.gold}55`, borderRadius:8, display:"inline-block" }}>
+              <span style={{ color:C.gold, fontWeight:700, fontSize:13 }}>⏰ Aguardando</span>
             </div>
-          </>) : <div style={{ color: C.dim }}>Sem jogos agendados</div>}
+          </>) : <div style={{color:C.dim}}>Sem jogos agendados</div>}
         </Card>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <Card>
-          <SecTitle accent>⚽ Artilheiros</SecTitle>
-          <RankList items={topGols} valKey="gols_marcados" cor={C.gold} emptyMsg="Sem dados" />
-        </Card>
-        <Card>
-          <SecTitle accent>🅰️ Assistências</SecTitle>
-          <RankList items={topAssist} valKey="assistencias" cor={C.win} emptyMsg="Sem dados" />
-        </Card>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+        <Card><SecTitle accent>⚽ Artilheiros</SecTitle><RankList items={topGols} valKey="gols_marcados" cor={C.gold}/></Card>
+        <Card><SecTitle accent>🅰️ Assistências</SecTitle><RankList items={topAssist} valKey="assistencias" cor={C.win}/></Card>
       </div>
     </div>
   );
@@ -269,89 +245,91 @@ function VisaoGeral({ temporada }) {
 
 // ── CALENDÁRIO ────────────────────────────────────────────────
 function Calendario({ temporada }) {
-  const [filtro, setFiltro] = useState("todos");
-  const { data: partidas, loading, error } = useQuery(
+  const [filtro, setFiltro] = useState("pendentes");
+  const { data: partidas, loading } = useQuery(
     () => sb(`partida?id_temporada=eq.${temporada.id_temporada}&select=*,adversario(nome),campo(nome)&order=data.asc`),
     [temporada.id_temporada]
   );
-
   if (loading) return <Spinner />;
-  if (error)   return <ErrMsg msg={error} />;
-
-  const all      = partidas || [];
-  const jogados  = all.filter(p => p.cancelada !== "S" && p.gols_marcados !== null);
-  const pendentes = all.filter(p => p.cancelada !== "S" && p.gols_marcados === null);
-  const lista = filtro === "jogados" ? jogados : filtro === "pendentes" ? pendentes : filtro === "casa" ? all.filter(p => p.em_casa === "S") : filtro === "fora" ? all.filter(p => p.em_casa === "N") : all;
-
-  const cols = [
-    { label: "Data",      render: p => fmtData(p.data) },
-    { label: "Hora",      render: p => fmtHora(p.data), style: { color: C.dim } },
-    { label: "Adversário",render: p => p.adversario?.nome || "A definir", style: { fontWeight: 700 } },
-    { label: "Local",     render: p => (
-      <span style={{ padding: "2px 8px", borderRadius: 4, fontSize: 12, fontWeight: 700, background: p.em_casa === "S" ? C.gold + "22" : C.surf2, color: p.em_casa === "S" ? C.gold : C.dim }}>
-        {p.em_casa === "S" ? "🏠 Casa" : "✈️ Fora"}
-      </span>
-    )},
-    { label: "Campo",     render: p => p.campo?.nome, style: { color: C.dim, fontSize: 12 } },
-    { label: "Placar",    render: p => p.cancelada === "S" ? "—" : p.gols_marcados !== null ? `${p.gols_marcados} × ${p.gols_sofridos}` : "— × —", style: { fontWeight: 800, fontSize: 16 } },
-    { label: "Resultado", render: p => <Badge {...resultado(p)} /> },
-    { label: "Obs",       render: p => p.observacoes, style: { color: C.dim, fontSize: 12 } },
-  ];
+  const all = partidas||[];
+  const jogados   = all.filter(p => p.cancelada!=="S" && p.gols_marcados!==null);
+  const pendentes = all.filter(p => p.cancelada!=="S" && p.gols_marcados===null);
+  const lista = filtro==="jogados"?jogados:filtro==="pendentes"?pendentes:filtro==="casa"?all.filter(p=>p.em_casa==="S"):filtro==="fora"?all.filter(p=>p.em_casa==="N"):all;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {[["todos", `Todos (${all.length})`], ["jogados", `Jogados (${jogados.length})`], ["pendentes", `Pendentes (${pendentes.length})`], ["casa", "Em Casa"], ["fora", "Fora"]].map(([v, l]) => (
-          <button key={v} onClick={() => setFiltro(v)} style={{ background: filtro === v ? C.gold : C.surf2, color: filtro === v ? "#0B3D2E" : C.dim, border: "none", padding: "6px 14px", borderRadius: 8, fontFamily: "inherit", fontWeight: 700, fontSize: 12, cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.06em" }}>{l}</button>
+    <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+      <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+        {[["todos",`Todos (${all.length})`],["jogados",`Jogados (${jogados.length})`],["pendentes",`Pendentes (${pendentes.length})`],["casa","Em Casa"],["fora","Fora"]].map(([v,l]) => (
+          <button key={v} onClick={()=>setFiltro(v)} style={{ background:filtro===v?C.gold:C.surf2, color:filtro===v?"#0B3D2E":C.dim, border:"none", padding:"6px 14px", borderRadius:8, fontFamily:"inherit", fontWeight:700, fontSize:12, cursor:"pointer", textTransform:"uppercase" }}>{l}</button>
         ))}
       </div>
-      <Card style={{ padding: 0, overflow: "hidden" }}>
-        <Tabela cols={cols} rows={lista} keyFn={p => p.id_partida} />
-        <div style={{ padding: "10px 16px", borderTop: `1px solid ${C.border}`, fontSize: 12, color: C.dim }}>{lista.length} partida{lista.length !== 1 ? "s" : ""} exibida{lista.length !== 1 ? "s" : ""}</div>
+      <Card style={{ padding:0, overflow:"hidden" }}>
+        <div style={{ overflowX:"auto" }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
+            <thead><tr style={{ background:C.surf2 }}>
+              {["Data","Hora","Adversário","Local","Campo","Placar","Resultado"].map(h => <th key={h} style={{ padding:"12px 14px", textAlign:"left", fontSize:11, textTransform:"uppercase", letterSpacing:"0.08em", color:C.dim, fontWeight:700, whiteSpace:"nowrap" }}>{h}</th>)}
+            </tr></thead>
+            <tbody>
+              {lista.map((p,i) => {
+                const res = resultado(p);
+                return (
+                  <tr key={p.id_partida} style={{ background:i%2===0?C.surface:C.bg }}
+                    onMouseEnter={e=>e.currentTarget.style.background=C.surf2}
+                    onMouseLeave={e=>e.currentTarget.style.background=i%2===0?C.surface:C.bg}>
+                    <td style={{ padding:"12px 14px", fontWeight:600, whiteSpace:"nowrap" }}>{fmtData(p.data)}</td>
+                    <td style={{ padding:"12px 14px", color:C.dim }}>{fmtHora(p.data)}</td>
+                    <td style={{ padding:"12px 14px", fontWeight:700 }}>{p.adversario?.nome||"A definir"}</td>
+                    <td style={{ padding:"12px 14px" }}>
+                      <span style={{ padding:"2px 8px", borderRadius:4, fontSize:12, fontWeight:700, background:p.em_casa==="S"?C.gold+"22":C.surf2, color:p.em_casa==="S"?C.gold:C.dim }}>
+                        {p.em_casa==="S"?"🏠 Casa":"✈️ Fora"}
+                      </span>
+                    </td>
+                    <td style={{ padding:"12px 14px", color:C.dim, fontSize:12, maxWidth:160, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.campo?.nome}</td>
+                    <td style={{ padding:"12px 14px", fontWeight:800, fontSize:16, whiteSpace:"nowrap", color:p.gols_marcados!==null?C.cream:C.dim }}>
+                      {p.cancelada==="S"?"—":p.gols_marcados!==null?`${p.gols_marcados} × ${p.gols_sofridos}`:"— × —"}
+                    </td>
+                    <td style={{ padding:"12px 14px" }}><Badge {...res}/></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ padding:"10px 16px", borderTop:`1px solid ${C.border}`, fontSize:12, color:C.dim }}>{lista.length} partida{lista.length!==1?"s":""} exibida{lista.length!==1?"s":""}</div>
       </Card>
     </div>
   );
 }
 
 // ── ELENCO ────────────────────────────────────────────────────
-function Elenco() {
-  const { data: jogadores, loading, error } = useQuery(
-    () => sb(`jogador?id_jogador=gt.0&select=*,posicao(nome)&order=camisa.asc`)
+function Elenco({ time }) {
+  const { data: jogadores, loading } = useQuery(
+    () => sb(`jogador?id_jogador=gt.0&id_time=eq.${time.id_time}&select=*,posicao(nome)&order=camisa.asc`),
+    [time.id_time]
   );
-
   if (loading) return <Spinner />;
-  if (error)   return <ErrMsg msg={error} />;
-
-  const ativos = (jogadores || []).filter(j => !j.data_fim);
+  const ativos = (jogadores||[]).filter(j => !j.data_fim);
   const grupos = [...new Set(ativos.map(j => j.posicao?.nome).filter(Boolean))];
-
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-        <Card style={{ padding: "14px 20px", flex: "none" }}>
-          <div style={{ fontSize: 28, fontWeight: 800, color: C.gold }}>{ativos.length}</div>
-          <div style={{ fontSize: 11, color: C.dim, textTransform: "uppercase" }}>Jogadores ativos</div>
-        </Card>
-        <Card style={{ padding: "14px 20px", flex: "none" }}>
-          <div style={{ fontSize: 28, fontWeight: 800, color: C.cream }}>{grupos.length}</div>
-          <div style={{ fontSize: 11, color: C.dim, textTransform: "uppercase" }}>Posições</div>
-        </Card>
-      </div>
-
+    <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
+      <Card style={{ padding:"14px 20px", display:"inline-flex", gap:20 }}>
+        <div style={{ textAlign:"center" }}>
+          <div style={{ fontSize:28, fontWeight:800, color:C.gold }}>{ativos.length}</div>
+          <div style={{ fontSize:11, color:C.dim, textTransform:"uppercase" }}>Jogadores ativos</div>
+        </div>
+      </Card>
       {grupos.map(grupo => {
         const jogs = ativos.filter(j => j.posicao?.nome === grupo);
         return (
           <div key={grupo}>
-            <div style={{ fontSize: 11, color: C.gold, textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 700, marginBottom: 10, borderLeft: `3px solid ${C.gold}`, paddingLeft: 10 }}>{grupo}</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px,1fr))", gap: 10 }}>
+            <div style={{ fontSize:11, color:C.gold, textTransform:"uppercase", letterSpacing:"0.12em", fontWeight:700, marginBottom:10, borderLeft:`3px solid ${C.gold}`, paddingLeft:10 }}>{grupo}</div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(190px,1fr))", gap:10 }}>
               {jogs.map(j => (
-                <Card key={j.id_jogador} style={{ padding: "14px 16px", display: "flex", alignItems: "center", gap: 14 }}>
-                  <div style={{ width: 44, height: 44, borderRadius: "50%", background: C.surf2, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, color: C.gold, fontSize: 18, flexShrink: 0 }}>
-                    {j.camisa}
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{j.apelido || j.nome}</div>
-                    {j.apelido && <div style={{ fontSize: 11, color: C.dim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{j.nome}</div>}
+                <Card key={j.id_jogador} style={{ padding:"14px 16px", display:"flex", alignItems:"center", gap:14 }}>
+                  <div style={{ width:44, height:44, borderRadius:"50%", background:C.surf2, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, color:C.gold, fontSize:18, flexShrink:0 }}>{j.camisa}</div>
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontWeight:700, fontSize:14, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{j.apelido||j.nome}</div>
+                    {j.apelido && <div style={{ fontSize:11, color:C.dim, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{j.nome}</div>}
                   </div>
                 </Card>
               ))}
@@ -364,75 +342,56 @@ function Elenco() {
 }
 
 // ── ESTATÍSTICAS ──────────────────────────────────────────────
-function Estatisticas() {
+function Estatisticas({ time }) {
   const [sortKey, setSortKey] = useState("gols_marcados");
-  const [asc, setAsc]         = useState(false);
-
-  const { data: stats, loading, error } = useQuery(() => sb(`vw_estatisticas_jogadores?select=*`));
-
+  const [asc, setAsc] = useState(false);
+  const { data: stats, loading } = useQuery(
+    () => sb(`vw_estatisticas_jogadores?select=*`), [time.id_time]
+  );
   if (loading) return <Spinner />;
-  if (error)   return <ErrMsg msg={error} />;
-
-  const sorted = [...(stats || [])].sort((a, b) => {
-    const va = a[sortKey] ?? 0; const vb = b[sortKey] ?? 0;
-    if (typeof va === "string") return asc ? va.localeCompare(vb) : vb.localeCompare(va);
-    return asc ? va - vb : vb - va;
+  const sorted = [...(stats||[])].sort((a,b) => {
+    const va=a[sortKey]??0; const vb=b[sortKey]??0;
+    return asc?va-vb:vb-va;
   });
-
-  const col = (label, key, extra = {}) => ({
-    label, key, align: "center",
-    style: key === sortKey ? { color: C.gold, fontWeight: 700 } : {},
-    ...extra,
-  });
-
   const COLS = [
-    { label: "Camisa",  key: "camisa",           align: "center" },
-    { label: "Jogador", key: "jogador",           align: "left", style: { fontWeight: 700 } },
-    { label: "Posição", key: "posicao",           align: "left", style: { color: C.dim, fontSize: 13 } },
-    col("PJ",      "total_partidas"),
-    col("TIT",     "partidas_titular"),
-    col("CAP",     "partidas_capitao"),
-    { label: "Gols",    key: "gols_marcados",     align: "center", style: { color: C.gold, fontWeight: 800 } },
-    col("Pen",     "gols_penalti"),
-    { label: "Assist.", key: "assistencias",      align: "center", style: { color: C.win, fontWeight: 700 } },
-    { label: "GC",      key: "gols_contra",       align: "center", style: { color: C.loss } },
+    { key:"camisa", label:"#", align:"center" },
+    { key:"jogador", label:"Jogador", align:"left", style:{fontWeight:700} },
+    { key:"posicao", label:"Posição", align:"left", style:{color:C.dim,fontSize:13} },
+    { key:"total_partidas", label:"PJ", align:"center" },
+    { key:"partidas_titular", label:"TIT", align:"center" },
+    { key:"gols_marcados", label:"Gols", align:"center", style:{color:C.gold,fontWeight:800} },
+    { key:"gols_penalti", label:"Pen", align:"center" },
+    { key:"assistencias", label:"Assist.", align:"center", style:{color:C.win,fontWeight:700} },
+    { key:"gols_contra", label:"GC", align:"center", style:{color:C.loss} },
   ];
-
-  const handleSort = (key) => { if (sortKey === key) setAsc(!asc); else { setSortKey(key); setAsc(false); } };
-
   return (
-    <Card style={{ padding: 0, overflow: "hidden" }}>
-      <div style={{ padding: "20px 24px 12px", borderBottom: `1px solid ${C.border}` }}>
+    <Card style={{ padding:0, overflow:"hidden" }}>
+      <div style={{ padding:"20px 24px 12px", borderBottom:`1px solid ${C.border}` }}>
         <SecTitle accent>Estatísticas dos Jogadores</SecTitle>
       </div>
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-          <thead>
-            <tr style={{ background: C.surf2 }}>
-              {COLS.map(c => (
-                <th key={c.label} onClick={() => handleSort(c.key)} style={{ padding: "12px 14px", textAlign: c.align || "left", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", color: sortKey === c.key ? C.gold : C.dim, fontWeight: 700, cursor: "pointer", userSelect: "none", whiteSpace: "nowrap" }}>
-                  {c.label} {sortKey === c.key ? (asc ? "↑" : "↓") : ""}
-                </th>
-              ))}
-            </tr>
-          </thead>
+      <div style={{ overflowX:"auto" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
+          <thead><tr style={{ background:C.surf2 }}>
+            {COLS.map(c => (
+              <th key={c.key} onClick={()=>{if(sortKey===c.key)setAsc(!asc);else{setSortKey(c.key);setAsc(false);}}}
+                style={{ padding:"12px 14px", textAlign:c.align||"left", fontSize:11, textTransform:"uppercase", letterSpacing:"0.08em", color:sortKey===c.key?C.gold:C.dim, fontWeight:700, cursor:"pointer", userSelect:"none", whiteSpace:"nowrap" }}>
+                {c.label} {sortKey===c.key?(asc?"↑":"↓"):""}
+              </th>
+            ))}
+          </tr></thead>
           <tbody>
-            {sorted.map((j, i) => (
-              <tr key={i} style={{ background: i % 2 === 0 ? C.surface : C.bg }}
-                onMouseEnter={e => e.currentTarget.style.background = C.surf2}
-                onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? C.surface : C.bg}>
-                {COLS.map(c => (
-                  <td key={c.label} style={{ padding: "12px 14px", textAlign: c.align || "left", ...(c.style || {}) }}>
-                    {j[c.key] ?? "—"}
-                  </td>
-                ))}
+            {sorted.map((j,i) => (
+              <tr key={i} style={{ background:i%2===0?C.surface:C.bg }}
+                onMouseEnter={e=>e.currentTarget.style.background=C.surf2}
+                onMouseLeave={e=>e.currentTarget.style.background=i%2===0?C.surface:C.bg}>
+                {COLS.map(c => <td key={c.key} style={{ padding:"12px 14px", textAlign:c.align||"left", ...(c.style||{}) }}>{j[c.key]??"—"}</td>)}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <div style={{ padding: "12px 24px", borderTop: `1px solid ${C.border}`, fontSize: 12, color: C.dim }}>
-        PJ = Partidas Jogadas · TIT = Titular · CAP = Capitão · Pen = Pênaltis · GC = Gols Contra · Clique no cabeçalho para ordenar
+      <div style={{ padding:"12px 24px", borderTop:`1px solid ${C.border}`, fontSize:12, color:C.dim }}>
+        PJ = Partidas Jogadas · TIT = Titular · Pen = Pênaltis · GC = Gols Contra · Clique no cabeçalho para ordenar
       </div>
     </Card>
   );
@@ -441,110 +400,104 @@ function Estatisticas() {
 // ── GOLS ──────────────────────────────────────────────────────
 function Gols({ temporada }) {
   const [filtroPartida, setFiltroPartida] = useState("todos");
-
-  const { data: gols, loading, error } = useQuery(
-    () => sb(`vw_gols_partida?select=*&order=data_partida.asc,periodo.asc,minuto.asc`)
-  );
+  const { data: gols, loading } = useQuery(() => sb(`vw_gols_partida?select=*&order=data_partida.asc,periodo.asc,minuto.asc`), []);
   const { data: partidas } = useQuery(
     () => sb(`partida?id_temporada=eq.${temporada.id_temporada}&select=id_partida,data,adversario(nome)&cancelada=eq.N&gols_marcados=not.is.null&order=data.asc`),
     [temporada.id_temporada]
   );
-
   if (loading) return <Spinner />;
-  if (error)   return <ErrMsg msg={error} />;
-
-  const lista = filtroPartida === "todos" ? (gols || []) : (gols || []).filter(g => g.id_partida === Number(filtroPartida));
-
-  const cols = [
-    { label: "Data",       render: g => g.data_partida, style: { color: C.dim, fontSize: 13 } },
-    { label: "Adversário", render: g => g.adversario, style: { fontWeight: 700 } },
-    { label: "Jogador",    render: g => (
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <span style={{ color: C.gold, fontWeight: 700 }}>⚽ {g.jogador}</span>
-        {g.penalti    === "Sim" && <Badge label="P"  cor={C.draw} />}
-        {g.gol_contra === "Sim" && <Badge label="GC" cor={C.loss} />}
-      </div>
-    )},
-    { label: "Período", key: "periodo", align: "center", render: g => `${g.periodo}°` },
-    { label: "Minuto",  key: "minuto",  align: "center", render: g => `${g.minuto}'`, style: { fontWeight: 700 } },
-    { label: "Pênalti",    align: "center", render: g => g.penalti    === "Sim" ? <Badge label="Sim" cor={C.draw} /> : <span style={{ color: C.dim, fontSize: 12 }}>Não</span> },
-    { label: "Gol Contra", align: "center", render: g => g.gol_contra === "Sim" ? <Badge label="Sim" cor={C.loss} /> : <span style={{ color: C.dim, fontSize: 12 }}>Não</span> },
-    { label: "Assistente", render: g => g.assistente ? <span style={{ color: C.win }}>🅰️ {g.assistente}</span> : "—" },
-  ];
-
+  const lista = filtroPartida==="todos"?(gols||[]):(gols||[]).filter(g=>g.id_partida===Number(filtroPartida));
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <span style={{ fontSize: 12, color: C.dim, textTransform: "uppercase", letterSpacing: "0.06em" }}>Filtrar:</span>
-        <select value={filtroPartida} onChange={e => setFiltroPartida(e.target.value)} style={{ background: C.surf2, color: C.cream, border: `1px solid ${C.border}`, borderRadius: 8, padding: "6px 14px", fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>
-          <option value="todos">Todos os jogos ({(gols || []).length} gols)</option>
-          {(partidas || []).map(p => {
-            const qtd = (gols || []).filter(g => g.id_partida === p.id_partida).length;
-            return <option key={p.id_partida} value={p.id_partida}>{fmtData(p.data)} — {p.adversario?.nome} ({qtd} gol{qtd !== 1 ? "s" : ""})</option>;
+    <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+      <div style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
+        <span style={{ fontSize:12, color:C.dim, textTransform:"uppercase", letterSpacing:"0.06em" }}>Filtrar:</span>
+        <select value={filtroPartida} onChange={e=>setFiltroPartida(e.target.value)} style={{ background:C.surf2, color:C.cream, border:`1px solid ${C.border}`, borderRadius:8, padding:"6px 14px", fontFamily:"inherit", fontSize:13 }}>
+          <option value="todos">Todos os jogos ({(gols||[]).length} gols)</option>
+          {(partidas||[]).map(p => {
+            const qtd = (gols||[]).filter(g=>g.id_partida===p.id_partida).length;
+            return <option key={p.id_partida} value={p.id_partida}>{fmtData(p.data)} — {p.adversario?.nome} ({qtd} gol{qtd!==1?"s":""})</option>;
           })}
         </select>
       </div>
-      <Card style={{ padding: 0, overflow: "hidden" }}>
-        <Tabela cols={cols} rows={lista} />
-        <div style={{ padding: "10px 16px", borderTop: `1px solid ${C.border}`, fontSize: 12, color: C.dim }}>
-          {lista.length} gol{lista.length !== 1 ? "s" : ""} exibido{lista.length !== 1 ? "s" : ""}
+      <Card style={{ padding:0, overflow:"hidden" }}>
+        <div style={{ overflowX:"auto" }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
+            <thead><tr style={{ background:C.surf2 }}>
+              {["Data","Adversário","Jogador","Período","Minuto","Pênalti","Gol Contra","Assistente"].map(h => <th key={h} style={{ padding:"12px 14px", textAlign:"left", fontSize:11, textTransform:"uppercase", letterSpacing:"0.08em", color:C.dim, fontWeight:700, whiteSpace:"nowrap" }}>{h}</th>)}
+            </tr></thead>
+            <tbody>
+              {lista.map((g,i) => (
+                <tr key={i} style={{ background:i%2===0?C.surface:C.bg }}
+                  onMouseEnter={e=>e.currentTarget.style.background=C.surf2}
+                  onMouseLeave={e=>e.currentTarget.style.background=i%2===0?C.surface:C.bg}>
+                  <td style={{ padding:"12px 14px", color:C.dim, fontSize:13, whiteSpace:"nowrap" }}>{g.data_partida}</td>
+                  <td style={{ padding:"12px 14px", fontWeight:700 }}>{g.adversario}</td>
+                  <td style={{ padding:"12px 14px" }}>
+                    <span style={{ color:C.gold, fontWeight:700 }}>⚽ {g.jogador}</span>
+                    {g.gol_contra==="Sim" && <span style={{ marginLeft:6 }}><Badge label="GC" cor={C.loss}/></span>}
+                    {g.penalti==="Sim" && <span style={{ marginLeft:6 }}><Badge label="P" cor={C.draw}/></span>}
+                  </td>
+                  <td style={{ padding:"12px 14px", textAlign:"center" }}>{g.periodo}°</td>
+                  <td style={{ padding:"12px 14px", textAlign:"center", fontWeight:700 }}>{g.minuto}'</td>
+                  <td style={{ padding:"12px 14px", textAlign:"center" }}>{g.penalti==="Sim"?<Badge label="Sim" cor={C.draw}/>:<span style={{color:C.dim,fontSize:13}}>Não</span>}</td>
+                  <td style={{ padding:"12px 14px", textAlign:"center" }}>{g.gol_contra==="Sim"?<Badge label="Sim" cor={C.loss}/>:<span style={{color:C.dim,fontSize:13}}>Não</span>}</td>
+                  <td style={{ padding:"12px 14px", color:g.assistente?C.win:C.dim }}>{g.assistente?`🅰️ ${g.assistente}`:"—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
+        <div style={{ padding:"10px 16px", borderTop:`1px solid ${C.border}`, fontSize:12, color:C.dim }}>{lista.length} gol{lista.length!==1?"s":""} exibido{lista.length!==1?"s":""}</div>
       </Card>
     </div>
   );
 }
 
-// ── APP ───────────────────────────────────────────────────────
+// ── APP PRINCIPAL ─────────────────────────────────────────────
 const TABS = [
-  { label: "Visão Geral",   icon: "📊" },
-  { label: "Calendário",    icon: "📅" },
-  { label: "Elenco",        icon: "👕" },
-  { label: "Estatísticas",  icon: "📈" },
-  { label: "Gols",          icon: "⚽" },
+  { label:"Visão Geral", icon:"📊" },
+  { label:"Calendário",  icon:"📅" },
+  { label:"Elenco",      icon:"👕" },
+  { label:"Estatísticas",icon:"📈" },
+  { label:"Gols",        icon:"⚽" },
 ];
 
-export default function App() {
-  const [tab, setTab]               = useState(0);
+function TimeApp({ time, onVoltar }) {
+  const [tab, setTab] = useState(0);
+  const { data: temporadas } = useQuery(
+    () => sb(`temporada?id_time=eq.${time.id_time}&select=*&order=data_inicio.desc`),
+    [time.id_time]
+  );
   const [temporadaSel, setTemporadaSel] = useState(null);
-
-  const { data: times }     = useQuery(() => sb(`time?select=*&limit=1`));
-  const { data: temporadas } = useQuery(() => sb(`temporada?select=*&order=data_inicio.desc`));
-
-  useEffect(() => {
-    if (temporadas?.length && !temporadaSel) setTemporadaSel(temporadas[0]);
-  }, [temporadas]);
-
-  const time = times?.[0];
+  useEffect(() => { if (temporadas?.length && !temporadaSel) setTemporadaSel(temporadas[0]); }, [temporadas]);
 
   const screens = temporadaSel ? [
-    <VisaoGeral   key="vg"    temporada={temporadaSel} />,
-    <Calendario   key="cal"   temporada={temporadaSel} />,
-    <Elenco       key="el" />,
-    <Estatisticas key="st" />,
-    <Gols         key="gols"  temporada={temporadaSel} />,
-  ] : [<Spinner key="s" />];
+    <VisaoGeral   key="vg"    temporada={temporadaSel}/>,
+    <Calendario   key="cal"   temporada={temporadaSel}/>,
+    <Elenco       key="el"    time={time}/>,
+    <Estatisticas key="st"    time={time}/>,
+    <Gols         key="gols"  temporada={temporadaSel}/>,
+  ] : [<Spinner key="s"/>];
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Oswald','Arial Narrow',Arial,sans-serif", color: C.cream, letterSpacing: "0.02em" }}>
-      {/* Header */}
-      <header style={{ background: "#091F15", borderBottom: `3px solid ${C.gold}`, padding: "0 24px", display: "flex", alignItems: "center", gap: 16, height: 68, position: "sticky", top: 0, zIndex: 100, boxShadow: "0 4px 24px #00000066" }}>
-        <Logo size={42} />
+    <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"'Oswald','Arial Narrow',Arial,sans-serif", color:C.cream }}>
+      <header style={{ background:"#091F15", borderBottom:`3px solid ${C.gold}`, padding:"0 24px", display:"flex", alignItems:"center", gap:16, height:68, position:"sticky", top:0, zIndex:100, boxShadow:"0 4px 24px #00000066" }}>
+        <button onClick={onVoltar} style={{ background:"none", border:"none", cursor:"pointer", padding:4, color:C.dim, fontSize:20, lineHeight:1 }} title="Voltar">‹</button>
+        <Logo size={42}/>
         <div>
-          <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: C.cream, lineHeight: 1 }}>Nerd do Campo</div>
-          <div style={{ fontSize: 11, color: C.gold, letterSpacing: "0.1em", textTransform: "uppercase" }}>
-            {time?.nome || "Carregando..."} · {temporadaSel?.nome || ""}
-          </div>
+          <div style={{ fontSize:20, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:C.cream, lineHeight:1 }}>Nerd do Campo</div>
+          <div style={{ fontSize:11, color:C.gold, letterSpacing:"0.1em", textTransform:"uppercase" }}>{time.nome} · {temporadaSel?.nome||""}</div>
         </div>
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-          {(temporadas || []).length > 1 && (
-            <select value={temporadaSel?.id_temporada || ""} onChange={e => setTemporadaSel(temporadas.find(t => t.id_temporada === Number(e.target.value)))}
-              style={{ background: C.surf2, color: C.cream, border: `1px solid ${C.border}`, borderRadius: 8, padding: "6px 12px", fontFamily: "inherit", fontSize: 12, cursor: "pointer" }}>
-              {(temporadas || []).map(t => <option key={t.id_temporada} value={t.id_temporada}>{t.nome}</option>)}
+        <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:8 }}>
+          {(temporadas||[]).length > 1 && (
+            <select value={temporadaSel?.id_temporada||""} onChange={e=>setTemporadaSel(temporadas.find(t=>t.id_temporada===Number(e.target.value)))}
+              style={{ background:C.surf2, color:C.cream, border:`1px solid ${C.border}`, borderRadius:8, padding:"6px 12px", fontFamily:"inherit", fontSize:12 }}>
+              {(temporadas||[]).map(t=><option key={t.id_temporada} value={t.id_temporada}>{t.nome}</option>)}
             </select>
           )}
-          <nav style={{ display: "flex", gap: 4 }}>
-            {TABS.map((t, i) => (
-              <button key={t.label} onClick={() => setTab(i)} style={{ background: tab === i ? C.gold : "transparent", color: tab === i ? "#0B3D2E" : C.dim, border: "none", padding: "7px 14px", borderRadius: 8, fontFamily: "inherit", fontWeight: 700, fontSize: 12, cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.06em", transition: "all 0.15s", display: "flex", alignItems: "center", gap: 5 }}>
+          <nav style={{ display:"flex", gap:4 }}>
+            {TABS.map((t,i) => (
+              <button key={t.label} onClick={()=>setTab(i)} style={{ background:tab===i?C.gold:"transparent", color:tab===i?"#0B3D2E":C.dim, border:"none", padding:"7px 14px", borderRadius:8, fontFamily:"inherit", fontWeight:700, fontSize:12, cursor:"pointer", textTransform:"uppercase", letterSpacing:"0.06em", transition:"all 0.15s", display:"flex", alignItems:"center", gap:5 }}>
                 <span>{t.icon}</span><span>{t.label}</span>
               </button>
             ))}
@@ -552,30 +505,32 @@ export default function App() {
         </div>
       </header>
 
-      {/* Banner */}
-      {time && temporadaSel && (
-        <div style={{ background: "linear-gradient(135deg,#103D2A 0%,#174D36 50%,#1A5C40 100%)", borderBottom: `1px solid ${C.border}`, padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20 }}>
+      {temporadaSel && (
+        <div style={{ background:"linear-gradient(135deg,#103D2A 0%,#174D36 50%,#1A5C40 100%)", borderBottom:`1px solid ${C.border}`, padding:"16px 24px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:20 }}>
           <div>
-            <div style={{ fontSize: 11, color: C.gold, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 2 }}>
-              {temporadaSel.nome}
-            </div>
-            <div style={{ fontSize: 22, fontWeight: 800, textTransform: "uppercase" }}>{time.nome}</div>
-            <div style={{ fontSize: 12, color: C.dim, marginTop: 3 }}>
-              Técnico: <strong style={{ color: C.cream }}>{temporadaSel.tecnico || time.tecnico || "—"}</strong>
-              {" · "}Presidente: <strong style={{ color: C.cream }}>{temporadaSel.presidente || time.presidente || "—"}</strong>
-              {" · "}Campo: <strong style={{ color: C.cream }}>{time.id_campo ? "ASSOC ESP SAPIRANGA" : "—"}</strong>
+            <div style={{ fontSize:11, color:C.gold, textTransform:"uppercase", letterSpacing:"0.12em", marginBottom:2 }}>{temporadaSel.nome}</div>
+            <div style={{ fontSize:22, fontWeight:800, textTransform:"uppercase" }}>{time.nome}</div>
+            <div style={{ fontSize:12, color:C.dim, marginTop:3 }}>
+              {temporadaSel.tecnico && <>Técnico: <strong style={{color:C.cream}}>{temporadaSel.tecnico}</strong> · </>}
+              {temporadaSel.presidente && <>Presidente: <strong style={{color:C.cream}}>{temporadaSel.presidente}</strong></>}
             </div>
           </div>
         </div>
       )}
 
-      <main style={{ maxWidth: 1200, margin: "0 auto", padding: "28px 24px" }}>
+      <main style={{ maxWidth:1200, margin:"0 auto", padding:"28px 24px" }}>
         {screens[tab]}
       </main>
 
-      <footer style={{ textAlign: "center", padding: "20px", color: C.dim, fontSize: 12, borderTop: `1px solid ${C.border}`, marginTop: 40 }}>
-        ⚽ Nerd do Campo · Dados em tempo real via Supabase
+      <footer style={{ textAlign:"center", padding:"20px", color:C.dim, fontSize:12, borderTop:`1px solid ${C.border}`, marginTop:40 }}>
+        ⚽ Nerd do Campo · {time.nome} · Dados em tempo real
       </footer>
     </div>
   );
+}
+
+export default function App() {
+  const [timeSel, setTimeSel] = useState(null);
+  if (timeSel) return <TimeApp time={timeSel} onVoltar={() => setTimeSel(null)} />;
+  return <SeletorTimes onSelect={setTimeSel} />;
 }
