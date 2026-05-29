@@ -1428,9 +1428,18 @@ function ConfigTime({ show }) {
   return (
     <Card style={{ padding:24, maxWidth:720 }}>
       <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-          <Input label="Nome do Time *" value={form.nome||""} onChange={e => set("nome", e.target.value)} />
-          <Input label="Telefone"       value={form.telefone||""} onChange={e => set("telefone", e.target.value)} />
+        <div style={{ display:"flex", alignItems:"flex-start", gap:20, marginBottom:8 }}>
+          <ImageUpload
+            label="Escudo do Time"
+            value={form.escudo_url||""}
+            onUpload={url => set("escudo_url", url)}
+            bucket="escudos"
+            nomeArquivo={`time_${form.id_time}`}
+          />
+          <div style={{ flex:1, display:"flex", flexDirection:"column", gap:12 }}>
+            <Input label="Nome do Time *" value={form.nome||""} onChange={e => set("nome", e.target.value)} />
+            <Input label="Telefone" value={form.telefone||""} onChange={e => set("telefone", e.target.value)} />
+          </div>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
           <Input label="Data de Fundação" type="date" value={form.data_fundacao||""} onChange={e => set("data_fundacao", e.target.value)} />
