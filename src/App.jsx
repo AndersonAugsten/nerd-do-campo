@@ -246,14 +246,126 @@ function VisaoGeral({ temporada }) {
   );
 }
 
+
+// ── FICHA DA PARTIDA (PÚBLICA) ────────────────────────────────
+function FichaPartidaPublica({ partida, onVoltar }) {
+  const { data: participacoes, loading: loadPart } = useQuery(
+    () => sb(`participacao?id_partida=eq.${partida.id_partida}&id_jogador=gt.0&select=*,jogador(nome,apelido,camisa,foto_url),posicao(nome)&order=titular.desc,camisa.asc`),
+    [partida.id_partida]
+  );
+  const { data: gols, loading: loadGols } = useQuery(
+    () => sb(`gol?select=*,participacao!inner(id_jogador,jogador(nome,apelido,camisa))&participacao.id_partida=eq.${partida.id_partida}&order=periodo.asc,minuto.asc`),
+    [partida.id_partida]
+  );
+
+  const res = resultado(partida);
+  const titulares = (participacoes||[]).filter(p => p.titular === "S");
+  const reservas  = (participacoes||[]).filter(p => p.titular === "N");
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+      <button onClick={onVoltar} style={{ background:"none", border:"none", color:C.gold, fontFamily:"inherit", fontWeight:700, fontSize:13, cursor:"pointer", textAlign:"left", padding:0, display:"flex", alignItems:"center", gap:6 }}>
+        ← Voltar ao Calendário
+      </button>
+
+      {/* Cabeçalho da partida */}
+      <Card style={{ padding:20 }}>
+        <div style={{ fontSize:12, color:C.dim, marginBottom:4 }}>
+          {fmtData(partida.data)} · {fmtHora(partida.data)} · {partida.em_casa==="S"?"🏠 Em Casa":"✈️ Fora"}
+        </div>
+        <div style={{ fontSize:24, fontWeight:800, textTransform:"uppercase", marginBottom:12 }}>{partida.adversario?.nome}</div>
+        <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:8 }}>
+          <span style={{ fontSize:42, fontWeight:800, color:C.gold }}>{partida.gols_marcados} × {partida.gols_sofridos}</span>
+          <Badge {...res}/>
+        </div>
+        <div style={{ fontSize:12, color:C.dim }}>🏟️ {partida.campo?.nome}</div>
+        {partida.observacoes && <div style={{ fontSize:12, color:C.dim, marginTop:6 }}>📝 {partida.observacoes}</div>}
+      </Card>
+
+      {/* Gols */}
+      {(gols||[]).length > 0 && (
+        <Card>
+          <SecTitle accent>⚽ Gols</SecTitle>
+          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+            {(gols||[]).map((g,i) => {
+              const j = g.participacao?.jogador;
+              const nome = j?.apelido || j?.nome || "—";
+              return (
+                <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:"8px 0", borderBottom:i<gols.length-1?`1px solid ${C.border}`:"none" }}>
+                  <span style={{ fontSize:20 }}>⚽</span>
+                  <div style={{ flex:1 }}>
+                    <span style={{ fontWeight:700, color:C.gold }}>{nome}</span>
+                    {g.gol_contra==="S" && <span style={{ marginLeft:6, fontSize:11, color:C.loss }}>(GC)</span>}
+                    {g.penalti==="S" && <span style={{ marginLeft:6, fontSize:11, color:C.draw }}>(P)</span>}
+                  </div>
+                  <span style={{ fontSize:13, color:C.dim }}>{g.periodo}° · {g.minuto}'</span>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {/* Escalação */}
+      {titulares.length > 0 && (
+        <Card>
+          <SecTitle accent>👕 Escalação</SecTitle>
+          <div style={{ marginBottom:16 }}>
+            <div style={{ fontSize:11, color:C.gold, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700, marginBottom:10, borderLeft:`3px solid ${C.gold}`, paddingLeft:8 }}>
+              Titulares ({titulares.length})
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:8 }}>
+              {titulares.map(p => (
+                <div key={p.id_participacao} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", background:C.surf2, borderRadius:8 }}>
+                  {p.jogador?.foto_url
+                    ? <img src={p.jogador.foto_url} alt={p.jogador.nome} style={{ width:32, height:32, borderRadius:"50%", objectFit:"cover", flexShrink:0 }}/>
+                    : <div style={{ width:32, height:32, borderRadius:"50%", background:C.border, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, color:C.gold, fontSize:12, flexShrink:0 }}>{p.camisa}</div>
+                  }
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontWeight:700, fontSize:12, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.jogador?.apelido||p.jogador?.nome}</div>
+                    <div style={{ fontSize:10, color:C.dim }}>{p.posicao?.nome}</div>
+                  </div>
+                  {p.capitao==="S" && <span title="Capitão" style={{ fontSize:14, marginLeft:"auto" }}>©</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+          {reservas.length > 0 && (
+            <div>
+              <div style={{ fontSize:11, color:C.dim, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700, marginBottom:10, borderLeft:`3px solid ${C.dim}`, paddingLeft:8 }}>
+                Reservas ({reservas.length})
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:8 }}>
+                {reservas.map(p => (
+                  <div key={p.id_participacao} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", background:C.surf2, borderRadius:8, opacity:0.7 }}>
+                    <div style={{ width:28, height:28, borderRadius:"50%", background:C.border, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, color:C.dim, fontSize:11, flexShrink:0 }}>{p.camisa}</div>
+                    <div style={{ minWidth:0 }}>
+                      <div style={{ fontWeight:700, fontSize:12, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.jogador?.apelido||p.jogador?.nome}</div>
+                      <div style={{ fontSize:10, color:C.dim }}>{p.posicao?.nome}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
+    </div>
+  );
+}
+
 // ── CALENDÁRIO ────────────────────────────────────────────────
 function Calendario({ temporada }) {
   const [filtro, setFiltro] = useState("pendentes");
+  const [partidaSel, setPartidaSel] = useState(null);
   const { data: partidas, loading } = useQuery(
     () => sb(`partida?id_temporada=eq.${temporada.id_temporada}&select=*,adversario(nome),campo(nome)&order=data.asc`),
     [temporada.id_temporada]
   );
   if (loading) return <Spinner />;
+
+  if (partidaSel) return <FichaPartidaPublica partida={partidaSel} onVoltar={() => setPartidaSel(null)}/>;
+
   const all = partidas||[];
   const jogados   = all.filter(p => p.cancelada!=="S" && p.gols_marcados!==null);
   const pendentes = all.filter(p => p.cancelada!=="S" && p.gols_marcados===null);
@@ -276,8 +388,10 @@ function Calendario({ temporada }) {
               {lista.map((p,i) => {
                 const res = resultado(p);
                 return (
-                  <tr key={p.id_partida} style={{ background:i%2===0?C.surface:C.bg }}
-                    onMouseEnter={e=>e.currentTarget.style.background=C.surf2}
+                  <tr key={p.id_partida}
+                    onClick={() => { if (p.gols_marcados !== null && p.cancelada !== "S") setPartidaSel(p); }}
+                    style={{ background:i%2===0?C.surface:C.bg, cursor: p.gols_marcados !== null && p.cancelada !== "S" ? "pointer" : "default" }}
+                    onMouseEnter={e=>{ e.currentTarget.style.background=C.surf2; }}
                     onMouseLeave={e=>e.currentTarget.style.background=i%2===0?C.surface:C.bg}>
                     <td style={{ padding:"12px 14px", fontWeight:600, whiteSpace:"nowrap" }}>{fmtData(p.data)}</td>
                     <td style={{ padding:"12px 14px", color:C.dim }}>{fmtHora(p.data)}</td>
