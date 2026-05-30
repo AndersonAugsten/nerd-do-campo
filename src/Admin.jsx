@@ -121,16 +121,6 @@ function BadgeP({ label, cor }) {
 }
 
 
-function VisaoGeral({ temporada }
-
-function Elenco({ time }
-
-function Estatisticas({ time }
-
-function Gols({ temporada }
-
-function FichaPartidaPublica({ partida, onVoltar }
-
 function VisaoAppPublico({ time, temporadas }) {
   const [aba, setAba] = React.useState(0);
   const [temporadaSel, setTemporadaSel] = React.useState(temporadas?.[0] || null);
@@ -218,7 +208,7 @@ function VisaoGeral({ temporada }) {
   const gm = jogadas.reduce((a,p) => a + (p.gols_marcados||0), 0);
   const gs = jogadas.reduce((a,p) => a + (p.gols_sofridos||0), 0);
   const pts = v*3+e;
-  const pct = jogadas.length > 0 ? Math.round((v/jogadas.length)*100) : 0;
+  const pct = jogadas.length > 0 ? Math.round((pts/(jogadas.length*3))*100) : 0;
   const ultima  = [...jogadas].reverse()[0];
   const proxima = (partidas||[]).find(p => p.cancelada !== "S" && p.gols_marcados === null);
   const maxGols   = topGols?.[0]?.gols_marcados || 1;
