@@ -218,19 +218,10 @@ function ModalImportacao({ resultado, onClose, onConfirmar, salvando }) {
 
 // ══════════════════════════════════════════════════════════════
 
-// ── Hook de ordenação ─────────────────────────────────────────
-function useSortable(dados, defaultKey = null, defaultAsc = true) {
-  const [sortKey, setSortKey] = useState(defaultKey);
-  const [asc, setAsc] = useState(defaultAsc);
-
-  function toggleSort(key) {
-    if (sortKey === key) setAsc(a => !a);
-    else { setSortKey(key); setAsc(true); }
-  }
-
-  const sorted = [...(dados||[])].sort((a, b) => {
-    if (!sortKey) return 0;
-    // Suporte a campos aninhados: "campo.nome", "cidade.nome"
+// ── Ordenação — função utilitária pura (sem hooks) ───────────
+function sortData(dados, sortKey, asc) {
+  if (!sortKey) return [...(dados||[])];
+  return [...(dados||[])].sort((a, b) => {
     function getVal(obj, key) {
       if (!key) return "";
       const parts = key.split(".");
@@ -244,25 +235,23 @@ function useSortable(dados, defaultKey = null, defaultAsc = true) {
     if (va > vb) return asc ? 1 : -1;
     return 0;
   });
-
-  // Th como função que retorna JSX — NÃO é um componente React
-  // para evitar erro de hooks dentro de map()
-  function thEl(colKey, children, extraStyle = {}) {
-    const ativo = sortKey === colKey;
-    return (
-      <th key={colKey||children} onClick={() => colKey && toggleSort(colKey)}
-        style={{ padding:"10px 14px", textAlign:"left", fontSize:11,
-          color: ativo ? C.gold : C.dim, textTransform:"uppercase",
-          fontWeight:700, whiteSpace:"nowrap",
-          cursor: colKey ? "pointer" : "default",
-          userSelect:"none", ...extraStyle }}>
-        {children}{colKey ? (ativo ? (asc ? " ↑" : " ↓") : " ↕") : ""}
-      </th>
-    );
-  }
-
-  return { sorted, th: thEl, Th: thEl };
 }
+
+function ThSortable({ colKey, sortKey, asc, onSort, children }) {
+  const ativo = sortKey === colKey;
+  return (
+    <th onClick={() => colKey && onSort(colKey)}
+      style={{ padding:"10px 14px", textAlign:"left", fontSize:11,
+        color: ativo ? C.gold : C.dim, textTransform:"uppercase",
+        fontWeight:700, whiteSpace:"nowrap",
+        cursor: colKey ? "pointer" : "default",
+        userSelect:"none" }}>
+      {children}{colKey ? (ativo ? (asc ? " ↑" : " ↓") : " ↕") : ""}
+    </th>
+  );
+}
+
+
 
 
 const C = {
@@ -1340,6 +1329,12 @@ export default function AdminAppCompleto() {
 
         {/* Conteúdo */}
         <main style={{ flex:1, padding:"28px 28px", minWidth:0 }}>
+          {menu === "inicio" && (
+            <PaginaInicio
+              dados={{ cidades:_cidades, campos:_campos, posicoes:_posicoes, adversarios:_adversarios, jogadores:_jogadores, temporadas, partidas:_partidas }}
+              onNavegar={setMenu}
+            />
+          )}
           {menu === "partidas" && !partida && !novaPartida && temporadaSel && (<>
             {secTitle(`Partidas — ${temporadaSel.nome}`)}
             <ListaPartidasWrapper temporada={temporadaSel} onSelect={p=>{setPartida(p);}} onNova={()=>setNovaPartida(true)} show={show} />
@@ -1446,8 +1441,7 @@ function CrudJogadores({ show }) {
   if (loading) return <Spinner />;
   const ativos   = (jogadores||[]).filter(j => !j.data_fim);
   const inativos = (jogadores||[]).filter(j =>  j.data_fim);
-  const { sorted: ativosOrdenados,   Th: ThJA } = useSortable(ativos,   "camisa", true);
-  const { sorted: inativosOrdenados, Th: ThJI } = useSortable(inativos, "data_fim", false);
+  const [_sk, _setSk] = useState("camisa"); const [_asc, _setAsc] = useState(true);
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
@@ -1497,7 +1491,7 @@ function CrudJogadores({ show }) {
         <Btn onClick={abrirNovo}>+ Novo Jogador</Btn>
       </div>
       <ModalImportacao resultado={resultadoImport} onClose={() => setResultadoImport(null)} onConfirmar={confirmarImport} salvando={saving}/>
-      {[["Ativos", ativosOrdenados], ["Inativos", inativosOrdenados]].map(([grupo, lista]) => {
+      {[["Ativos", sortData(ativos, _sk, _asc)], ["Inativos", sortData(inativos, _sk, _asc)]].map(([grupo, lista]) => {
         if (!lista.length) return null;
         return (
           <div key={grupo}>
@@ -1505,16 +1499,16 @@ function CrudJogadores({ show }) {
             <Card style={{ padding:0, overflow:"hidden" }}>
               <table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
                 <thead><tr style={{ background:C.surf2 }}>
-                  {th("camisa", "#")}
-                  {th("nome", "Nome")}
-                  {th("apelido", "Apelido")}
-                  {th("posicao.nome", "Posição")}
-                  {th("telefone", "Telefone")}
-                  {th("email", "E-mail")}
-                  {th("data_inicio", "Início")}
-                  {th("data_fim", "Saída")}
-                  {th(null, "Obs.")}
-                  {th(null, "")}
+                  <ThSortable colKey="camisa" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>#</ThSortable>
+                  <ThSortable colKey="nome" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Nome</ThSortable>
+                  <ThSortable colKey="apelido" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Apelido</ThSortable>
+                  <ThSortable colKey="posicao.nome" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Posição</ThSortable>
+                  <ThSortable colKey="telefone" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Telefone</ThSortable>
+                  <ThSortable colKey="email" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>E-mail</ThSortable>
+                  <ThSortable colKey="data_inicio" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Início</ThSortable>
+                  <ThSortable colKey="data_fim" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Saída</ThSortable>
+                  <ThSortable sortKey={_sk} asc={_asc} onSort={()=>{}}>Obs.</ThSortable>
+                  <ThSortable sortKey={_sk} asc={_asc} onSort={()=>{}}></ThSortable>
                 </tr></thead>
                 <tbody>
                   {lista.map((j,i) => (
@@ -1588,7 +1582,7 @@ function CrudAdversarios({ show }) {
     _idTimeA ? api.get(`adversario?id_time=eq.${_idTimeA}&select=*,campo(nome),cidade(nome,estado)&order=nome.asc`) : api.get(`adversario?select=*,campo(nome),cidade(nome,estado)&order=nome.asc`),
     [_idTimeA]
   );
-  const { sorted: adversariosOrdenados, Th: ThAdv } = useSortable(adversarios, "nome", true);
+  const [_sk, _setSk] = useState("nome"); const [_asc, _setAsc] = useState(true);
   const { data: campos }  = useQuery(() => api.get(`campo?select=*&order=nome.asc`));
   const { data: cidades } = useQuery(() => api.get(`cidade?select=*&order=nome.asc`));
   const [modal, setModal]   = useState(null);
@@ -1671,16 +1665,16 @@ function CrudAdversarios({ show }) {
       <Card style={{ padding:0, overflow:"hidden" }}>
         <table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
           <thead><tr style={{ background:C.surf2 }}>
-                  {th("nome", "Nome")}
-                  {th("campo.nome", "Campo")}
-                  {th("cidade.nome", "Cidade")}
-                  {th("contato", "Contato")}
-                  {th("observacoes", "Observações")}
-                  {th("data_fim", "Inativo em")}
-                  {th(null, "")}
+                  <ThSortable colKey="nome" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Nome</ThSortable>
+                  <ThSortable colKey="campo.nome" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Campo</ThSortable>
+                  <ThSortable colKey="cidade.nome" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Cidade</ThSortable>
+                  <ThSortable colKey="contato" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Contato</ThSortable>
+                  <ThSortable colKey="observacoes" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Observações</ThSortable>
+                  <ThSortable colKey="data_fim" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Inativo em</ThSortable>
+                  <ThSortable sortKey={_sk} asc={_asc} onSort={()=>{}}></ThSortable>
           </tr></thead>
           <tbody>
-            {(adversariosOrdenados||[]).map((a,i) => (
+            {(sortData(adversarios, _sk, _asc)||[]).map((a,i) => (
               <tr key={a.id_adversario} style={{ background: i%2===0?C.surface:C.bg }}>
                 <td style={{ padding:"11px 14px", fontWeight:700 }}>{a.nome}</td>
                 <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{a.campo?.nome || "—"}</td>
@@ -1723,7 +1717,7 @@ function CrudAdversarios({ show }) {
 function CrudCampos({ show }) {
   const { data: campos, loading, reload } = useQuery(() => api.get(`campo?select=*,cidade(nome,estado)&order=nome.asc`));
   const { data: cidades } = useQuery(() => api.get(`cidade?select=*&order=nome.asc`));
-  const { sorted: camposOrdenados, Th: ThCmp } = useSortable(campos, "nome", true);
+  const [_sk, _setSk] = useState("nome"); const [_asc, _setAsc] = useState(true);
   const [modal, setModal]   = useState(null);
   const [form, setForm]     = useState({});
   const [saving, setSaving] = useState(false);
@@ -1802,14 +1796,14 @@ function CrudCampos({ show }) {
       <Card style={{ padding:0, overflow:"hidden" }}>
         <table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
           <thead><tr style={{ background:C.surf2 }}>
-                  {th("nome", "Nome")}
-                  {th("endereco", "Endereço")}
-                  {th("cidade.nome", "Cidade")}
-                  {th("data_fim", "Inativo em")}
-                  {th(null, "")}
+                  <ThSortable colKey="nome" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Nome</ThSortable>
+                  <ThSortable colKey="endereco" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Endereço</ThSortable>
+                  <ThSortable colKey="cidade.nome" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Cidade</ThSortable>
+                  <ThSortable colKey="data_fim" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Inativo em</ThSortable>
+                  <ThSortable sortKey={_sk} asc={_asc} onSort={()=>{}}></ThSortable>
           </tr></thead>
           <tbody>
-            {(camposOrdenados||[]).map((c,i) => (
+            {(sortData(campos, _sk, _asc)||[]).map((c,i) => (
               <tr key={c.id_campo} style={{ background: i%2===0?C.surface:C.bg }}>
                 <td style={{ padding:"11px 14px", fontWeight:700 }}>{c.nome}</td>
                 <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{c.endereco || "—"}</td>
@@ -1845,7 +1839,7 @@ function CrudCampos({ show }) {
 // ── CRUD CIDADES ──────────────────────────────────────────────
 function CrudCidades({ show }) {
   const { data: cidades, loading, reload } = useQuery(() => api.get(`cidade?select=*&order=nome.asc`));
-  const { sorted: cidadesOrdenadas, Th: ThCid } = useSortable(cidades, "nome", true);
+  const [_sk, _setSk] = useState("nome"); const [_asc, _setAsc] = useState(true);
   const [modal, setModal]   = useState(null);
   const [form, setForm]     = useState({});
   const [saving, setSaving]           = useState(false);
@@ -1922,12 +1916,12 @@ function CrudCidades({ show }) {
       <Card style={{ padding:0, overflow:"hidden" }}>
         <table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
           <thead><tr style={{ background:C.surf2 }}>
-                  {th("nome", "Cidade")}
-                  {th("estado", "Estado")}
-                  {th(null, "")}
+                  <ThSortable colKey="nome" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Cidade</ThSortable>
+                  <ThSortable colKey="estado" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Estado</ThSortable>
+                  <ThSortable sortKey={_sk} asc={_asc} onSort={()=>{}}></ThSortable>
           </tr></thead>
           <tbody>
-            {(cidadesOrdenadas||[]).map((c,i) => (
+            {(sortData(cidades, _sk, _asc)||[]).map((c,i) => (
               <tr key={c.id_cidade} style={{ background: i%2===0?C.surface:C.bg }}>
                 <td style={{ padding:"11px 14px", fontWeight:700 }}>{c.nome}</td>
                 <td style={{ padding:"11px 14px", color:C.dim }}>{c.estado || "—"}</td>
@@ -1960,7 +1954,7 @@ function CrudPosicoes({ show }) {
   const { data: posicoes, loading, reload } = useQuery(() =>
     api.get(`posicao?select=*,posicao_pai:posicao!id_posicao_pai(nome)&order=ordem.asc,nome.asc`)
   );
-  const { sorted: posicoesOrdenadas, Th: ThPos } = useSortable(posicoes, "nome", true);
+  const [_sk, _setSk] = useState("nome"); const [_asc, _setAsc] = useState(true);
   const [modal, setModal]   = useState(null);
   const [form, setForm]     = useState({});
   const [saving, setSaving] = useState(false);
@@ -2003,8 +1997,8 @@ function CrudPosicoes({ show }) {
 
   if (loading) return <Spinner />;
 
-  const grupos = (posicoesOrdenadas||[]).filter(p => !p.id_posicao_pai);
-  const filhas  = (posicoesOrdenadas||[]).filter(p =>  p.id_posicao_pai);
+  const grupos = (sortData(posicoes, _sk, _asc)||[]).filter(p => !p.id_posicao_pai);
+  const filhas  = (sortData(posicoes, _sk, _asc)||[]).filter(p =>  p.id_posicao_pai);
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
@@ -2049,12 +2043,12 @@ function CrudPosicoes({ show }) {
             <Card style={{ padding:0, overflow:"hidden" }}>
               <table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
                 <thead><tr style={{ background:C.surf2 }}>
-                  {th("nome", "Nome")}
-                  {th("descricao", "Descrição")}
-                  {th("ordem", "Ordem")}
-                  {th("posicao_pai.nome", "Grupo pai")}
-                  {th("data_fim", "Inativo em")}
-                  {th(null, "")}
+                  <ThSortable colKey="nome" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Nome</ThSortable>
+                  <ThSortable colKey="descricao" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Descrição</ThSortable>
+                  <ThSortable colKey="ordem" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Ordem</ThSortable>
+                  <ThSortable colKey="posicao_pai.nome" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Grupo pai</ThSortable>
+                  <ThSortable colKey="data_fim" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Inativo em</ThSortable>
+                  <ThSortable sortKey={_sk} asc={_asc} onSort={()=>{}}></ThSortable>
                 </tr></thead>
                 <tbody>
                   {lista.map((p, i) => (
@@ -2106,7 +2100,7 @@ function CrudTemporadas({ show }) {
     api.get(`temporada?select=*,time(nome)&order=data_inicio.desc`)
   );
   const { data: times } = useQuery(() => api.get(`time?select=*&order=nome.asc`));
-  const { sorted: temporadasOrdenadas, Th: ThTemp } = useSortable(temporadas, "data_inicio", false);
+  const [_sk, _setSk] = useState("data_inicio"); const [_asc, _setAsc] = useState(false);
   const [modal, setModal]   = useState(null);
   const [form, setForm]     = useState({});
   const [saving, setSaving] = useState(false);
@@ -2195,22 +2189,22 @@ function CrudTemporadas({ show }) {
       <Card style={{ padding:0, overflow:"hidden" }}>
         <table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
           <thead><tr style={{ background:C.surf2 }}>
-                  {th("nome", "Temporada")}
-                  {th("time.nome", "Time")}
-                  {th("data_inicio", "Início")}
-                  {th("data_fim", "Fim")}
-                  {th("tecnico", "Técnico")}
-                  {th("presidente", "Presidente")}
-                  {th("vice_presidente", "Vice-Pres.")}
-                  {th("financeiro", "Financeiro")}
-                  {th("vice_financeiro", "Vice-Fin.")}
-                  {th("marca_jogos", "Marca Jogos")}
-                  {th("resp_redes_sociais", "Redes")}
-                  {th("resp_eventos", "Eventos")}
-                  {th(null, "")}
+                  <ThSortable colKey="nome" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Temporada</ThSortable>
+                  <ThSortable colKey="time.nome" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Time</ThSortable>
+                  <ThSortable colKey="data_inicio" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Início</ThSortable>
+                  <ThSortable colKey="data_fim" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Fim</ThSortable>
+                  <ThSortable colKey="tecnico" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Técnico</ThSortable>
+                  <ThSortable colKey="presidente" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Presidente</ThSortable>
+                  <ThSortable colKey="vice_presidente" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Vice-Pres.</ThSortable>
+                  <ThSortable colKey="financeiro" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Financeiro</ThSortable>
+                  <ThSortable colKey="vice_financeiro" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Vice-Fin.</ThSortable>
+                  <ThSortable colKey="marca_jogos" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Marca Jogos</ThSortable>
+                  <ThSortable colKey="resp_redes_sociais" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Redes</ThSortable>
+                  <ThSortable colKey="resp_eventos" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Eventos</ThSortable>
+                  <ThSortable sortKey={_sk} asc={_asc} onSort={()=>{}}></ThSortable>
           </tr></thead>
           <tbody>
-            {(temporadasOrdenadas||[]).map((t,i) => (
+            {(sortData(temporadas, _sk, _asc)||[]).map((t,i) => (
               <tr key={t.id_temporada} style={{ background: i%2===0?C.surface:C.bg }}>
                 <td style={{ padding:"11px 14px", fontWeight:700, color:C.gold, whiteSpace:"nowrap" }}>{t.nome}</td>
                 <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{t.time?.nome || "—"}</td>
