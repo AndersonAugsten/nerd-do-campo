@@ -1761,6 +1761,20 @@ export default function AdminAppCompleto() {
       <div style={{ display:"flex", flex:1 }}>
         {/* Sidebar */}
         <aside style={{ width:210, background:"#091F15", borderRight:`1px solid ${C.border}`, padding:"16px 0", flexShrink:0, position:"sticky", top:64, height:"calc(100vh - 64px)", overflowY:"auto" }}>
+          {/* Itens sem grupo: Início e Visão App */}
+          {MENU.filter(m => m.grupo === "").map(m => (
+            <button key={m.id} onClick={() => navMenu(m.id)} style={{
+              display:"flex", alignItems:"center", gap:10, width:"100%", padding:"10px 20px",
+              background: menu===m.id ? C.gold+"22" : "transparent",
+              borderLeft: menu===m.id ? `3px solid ${C.gold}` : "3px solid transparent",
+              border:"none", borderRight:"none", color: menu===m.id ? C.gold : C.cream,
+              fontFamily:"inherit", fontWeight:700, fontSize:12, textTransform:"uppercase",
+              letterSpacing:"0.06em", cursor:"pointer", textAlign:"left", transition:"all 0.15s",
+            }}>
+              <span>{m.icon}</span><span>{m.label}</span>
+            </button>
+          ))}
+          <div style={{ height:1, background:C.border, margin:"8px 0" }}/>
           {["Jogos","Cadastros","Configurações"].map(grupo => {
             const itens = MENU.filter(m => m.grupo === grupo);
             return (
