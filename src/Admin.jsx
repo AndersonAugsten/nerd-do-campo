@@ -121,57 +121,6 @@ function BadgeP({ label, cor }) {
 }
 
 
-function VisaoAppPublico({ time, temporadas }) {
-  const [aba, setAba] = React.useState(0);
-  const [temporadaSel, setTemporadaSel] = React.useState(temporadas?.[0] || null);
-  React.useEffect(() => { if (temporadas?.length && !temporadaSel) setTemporadaSel(temporadas[0]); }, [temporadas]);
-
-  const TABS_P = [
-    { label:"Visão Geral", icon:"📊" },
-    { label:"Calendário",  icon:"📅" },
-    { label:"Elenco",      icon:"👕" },
-    { label:"Estatísticas",icon:"📈" },
-    { label:"Gols",        icon:"⚽" },
-  ];
-
-  if (!temporadaSel) return <Spinner/>;
-
-  const screens = [
-    <VisaoGeral    key="vg"   temporada={temporadaSel}/>,
-    <Calendario    key="cal"  temporada={temporadaSel}/>,
-    <Elenco        key="el"   time={time}/>,
-    <Estatisticas  key="st"   time={time}/>,
-    <Gols          key="gols" temporada={temporadaSel}/>,
-  ];
-
-  return (
-    <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
-      <Card style={{ padding:"12px 16px", background:C.surf2 }}>
-        <div style={{ fontSize:11, color:C.gold, fontWeight:700, textTransform:"uppercase", marginBottom:8 }}>
-          👁️ Visualizando como app público — {time?.nome}
-        </div>
-        <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
-          {(temporadas||[]).length > 1 && (
-            <select value={temporadaSel?.id_temporada||""} onChange={e => setTemporadaSel((temporadas||[]).find(t => t.id_temporada === Number(e.target.value)))}
-              style={{ background:C.bg, color:C.cream, border:`1px solid ${C.border}`, borderRadius:6, padding:"5px 10px", fontFamily:"inherit", fontSize:12 }}>
-              {(temporadas||[]).map(t => <option key={t.id_temporada} value={t.id_temporada}>{t.nome}</option>)}
-            </select>
-          )}
-          <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-            {TABS_P.map((t,i) => (
-              <button key={t.label} onClick={() => setAba(i)} style={{ background: aba===i ? C.gold : C.surface, color: aba===i ? "#0B3D2E" : C.dim, border:`1px solid ${aba===i ? C.gold : C.border}`, borderRadius:8, padding:"6px 14px", fontFamily:"inherit", fontWeight:700, fontSize:12, cursor:"pointer", textTransform:"uppercase", display:"flex", alignItems:"center", gap:5 }}>
-                {t.icon} {t.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </Card>
-      <div>
-        {screens[aba]}
-      </div>
-    </div>
-  );
-}
 
 
 // ══════════════════════════════════════════════════════════════
