@@ -1377,7 +1377,10 @@ function CrudJogadores({ show }) {
           camisa: row.camisa ? String(row.camisa) : null,
           id_posicao: pos?.id_posicao || null,
           telefone: row.telefone||null,
+          email: row.email||null,
           data_inicio: row.data_inicio||null,
+          data_fim: row.data_fim||null,
+          observacoes: row.observacoes||null,
           id_time: id_time_val,
         };
         if (row.id_jogador) await api.patch(`jogador?id_jogador=eq.${row.id_jogador}`, body);
@@ -1410,7 +1413,10 @@ function CrudJogadores({ show }) {
               { key:"camisa",        label:"camisa",      width:8,  descricao:"Número da camisa." },
               { key:"posicao_nome",  label:"posicao",     width:20, descricao:"Nome exato da posição cadastrada." },
               { key:"telefone",      label:"telefone",    width:18, descricao:"Telefone do jogador." },
-              { key:"data_inicio",   label:"data_inicio", width:14, descricao:"Data de entrada no time (DD/MM/AAAA)." },
+              { key:"email",         label:"email",       width:30, descricao:"E-mail do jogador." },
+              { key:"data_inicio",   label:"data_inicio", width:14, descricao:"Data de entrada no time (AAAA-MM-DD)." },
+              { key:"data_fim",      label:"data_fim",    width:14, descricao:"Data de saída do time (AAAA-MM-DD). Preencher para inativar." },
+              { key:"observacoes",   label:"observacoes", width:40, descricao:"Observações sobre o jogador." },
             ],
             "jogadores",
             ["- id preenchido = atualiza", "- id vazio = cria novo", "- Posição deve estar cadastrada no sistema"]
@@ -1533,7 +1539,7 @@ function CrudAdversarios({ show }) {
       const id_time_val = utData?.[0]?.id_time || null;
       for (const row of resultadoImport._dados) {
         const campo = (campos||[]).find(c => c.nome.toUpperCase() === String(row.campo||"").trim().toUpperCase());
-        const body = { nome: String(row.nome||"").trim(), id_campo: campo?.id_campo||null, contato: row.contato||null, id_time: id_time_val };
+        const body = { nome: String(row.nome||"").trim(), id_campo: campo?.id_campo||null, contato: row.contato||null, observacoes: row.observacoes||null, id_time: id_time_val };
         if (row.id_adversario) await api.patch(`adversario?id_adversario=eq.${row.id_adversario}`, body);
         else await api.post("adversario", body);
       }
@@ -1565,10 +1571,11 @@ function CrudAdversarios({ show }) {
           onExportar={() => exportarExcel(
             (adversarios||[]).filter(a=>!a.data_fim).map(a => ({...a, campo: a.campo?.nome||""})),
             [
-              { key:"id_adversario", label:"id",      width:8,  descricao:"NÃO altere. Vazio = novo." },
-              { key:"nome",          label:"nome",    width:30, descricao:"Nome do adversário. OBRIGATÓRIO." },
-              { key:"campo",         label:"campo",   width:30, descricao:"Nome exato do campo cadastrado." },
-              { key:"contato",       label:"contato", width:30, descricao:"Telefone ou nome do contato." },
+              { key:"id_adversario", label:"id",          width:8,  descricao:"NÃO altere. Vazio = novo." },
+              { key:"nome",          label:"nome",        width:30, descricao:"Nome do adversário. OBRIGATÓRIO." },
+              { key:"campo",         label:"campo",       width:30, descricao:"Nome exato do campo cadastrado." },
+              { key:"contato",       label:"contato",     width:25, descricao:"Telefone ou nome do contato." },
+              { key:"observacoes",   label:"observacoes", width:40, descricao:"Observações sobre o adversário." },
             ],
             "adversarios",
             ["- id preenchido = atualiza", "- id vazio = cria novo", "- Campo deve estar cadastrado"]
@@ -1880,7 +1887,7 @@ function CrudPosicoes({ show }) {
     setSaving(true);
     try {
       for (const row of resultadoImport._dados) {
-        const body = { nome: String(row.nome||"").trim(), id_posicao_pai: row.id_grupo ? Number(row.id_grupo) : null };
+        const body = { nome: String(row.nome||"").trim(), id_posicao_pai: row.id_grupo ? Number(row.id_grupo) : null, ordem: row.ordem ? Number(row.ordem) : null, descricao: row.descricao||null };
         if (row.id_posicao) await api.patch(`posicao?id_posicao=eq.${row.id_posicao}`, body);
         else await api.post("posicao", body);
       }
@@ -1922,9 +1929,11 @@ function CrudPosicoes({ show }) {
           onExportar={() => exportarExcel(
             posicoes||[],
             [
-              { key:"id_posicao",     label:"id",       width:8,  descricao:"NÃO altere. Vazio = novo." },
-              { key:"nome",           label:"nome",     width:25, descricao:"Nome da posição. OBRIGATÓRIO." },
-              { key:"id_posicao_pai", label:"id_grupo", width:8,  descricao:"ID do grupo (Goleiro=1, Defesa=2, Meio=3, Ataque=4). Deixe vazio se for grupo." },
+              { key:"id_posicao",     label:"id",        width:8,  descricao:"NÃO altere. Vazio = novo." },
+              { key:"nome",           label:"nome",      width:25, descricao:"Nome da posição. OBRIGATÓRIO." },
+              { key:"id_posicao_pai", label:"id_grupo",  width:8,  descricao:"ID do grupo pai. Deixe vazio se for grupo principal." },
+              { key:"ordem",          label:"ordem",     width:8,  descricao:"Ordem de exibição (número)." },
+              { key:"descricao",      label:"descricao", width:40, descricao:"Descrição da posição." },
             ],
             "posicoes",
             ["- Grupos não têm id_grupo", "- Posições específicas devem ter id_grupo preenchido"]
@@ -2019,7 +2028,7 @@ function CrudTemporadas({ show }) {
       const utData = await api.get(`usuario_time?select=id_time&limit=1`);
       const id_time_val = utData?.[0]?.id_time || null;
       for (const row of resultadoImport._dados) {
-        const body = { nome: String(row.nome||"").trim(), data_inicio: row.data_inicio||null, data_fim: row.data_fim||null, tecnico: row.tecnico||null, presidente: row.presidente||null, id_time: id_time_val };
+        const body = { nome: String(row.nome||"").trim(), data_inicio: row.data_inicio||null, data_fim: row.data_fim||null, tecnico: row.tecnico||null, presidente: row.presidente||null, vice_presidente: row.vice_presidente||null, financeiro: row.financeiro||null, vice_financeiro: row.vice_financeiro||null, marca_jogos: row.marca_jogos||null, resp_redes_sociais: row.resp_redes_sociais||null, resp_eventos: row.resp_eventos||null, id_time: id_time_val };
         if (row.id_temporada) await api.patch(`temporada?id_temporada=eq.${row.id_temporada}`, body);
         else await api.post("temporada", body);
       }
@@ -2056,12 +2065,18 @@ function CrudTemporadas({ show }) {
           onExportar={() => exportarExcel(
             temporadas||[],
             [
-              { key:"id_temporada",  label:"id",          width:8,  descricao:"NÃO altere. Vazio = nova temporada." },
-              { key:"nome",          label:"nome",        width:25, descricao:"Nome da temporada. OBRIGATÓRIO." },
-              { key:"data_inicio",   label:"data_inicio", width:14, descricao:"Data de início (AAAA-MM-DD). OBRIGATÓRIO." },
-              { key:"data_fim",      label:"data_fim",    width:14, descricao:"Data de fim (AAAA-MM-DD). OBRIGATÓRIO." },
-              { key:"tecnico",       label:"tecnico",     width:20, descricao:"Nome do técnico." },
-              { key:"presidente",    label:"presidente",  width:20, descricao:"Nome do presidente." },
+              { key:"id_temporada",      label:"id",                width:8,  descricao:"NÃO altere. Vazio = nova temporada." },
+              { key:"nome",              label:"nome",              width:25, descricao:"Nome da temporada. OBRIGATÓRIO." },
+              { key:"data_inicio",       label:"data_inicio",       width:14, descricao:"Data de início (AAAA-MM-DD). OBRIGATÓRIO." },
+              { key:"data_fim",          label:"data_fim",          width:14, descricao:"Data de fim (AAAA-MM-DD). OBRIGATÓRIO." },
+              { key:"tecnico",           label:"tecnico",           width:20, descricao:"Nome do técnico." },
+              { key:"presidente",        label:"presidente",        width:20, descricao:"Nome do presidente." },
+              { key:"vice_presidente",   label:"vice_presidente",   width:20, descricao:"Nome do vice-presidente." },
+              { key:"financeiro",        label:"financeiro",        width:20, descricao:"Nome do financeiro." },
+              { key:"vice_financeiro",   label:"vice_financeiro",   width:20, descricao:"Nome do vice-financeiro." },
+              { key:"marca_jogos",       label:"marca_jogos",       width:20, descricao:"Nome de quem marca os jogos." },
+              { key:"resp_redes_sociais",label:"resp_redes_sociais",width:20, descricao:"Responsável pelas redes sociais." },
+              { key:"resp_eventos",      label:"resp_eventos",      width:20, descricao:"Responsável pelos eventos." },
             ],
             "temporadas",
             ["- id preenchido = atualiza", "- id vazio = cria nova temporada", "- Datas no formato AAAA-MM-DD"]
