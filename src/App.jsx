@@ -474,15 +474,22 @@ function Estatisticas({ time }) {
     return asc?va-vb:vb-va;
   });
   const COLS = [
-    { key:"camisa", label:"#", align:"center" },
-    { key:"jogador", label:"Jogador", align:"left", style:{fontWeight:700} },
-    { key:"posicao", label:"Posição", align:"left", style:{color:C.dim,fontSize:13} },
-    { key:"total_partidas", label:"PJ", align:"center" },
-    { key:"partidas_titular", label:"TIT", align:"center" },
-    { key:"gols_marcados", label:"Gols", align:"center", style:{color:C.gold,fontWeight:800} },
-    { key:"gols_penalti", label:"Pen", align:"center" },
-    { key:"assistencias", label:"Assist.", align:"center", style:{color:C.win,fontWeight:700} },
-    { key:"gols_contra", label:"GC", align:"center", style:{color:C.loss} },
+    { key:"camisa",           label:"#",       align:"center" },
+    { key:"jogador",          label:"Jogador", align:"left", style:{fontWeight:700} },
+    { key:"posicao",          label:"Posição", align:"left", style:{color:C.dim,fontSize:13} },
+    { key:"total_partidas",   label:"PJ",      align:"center" },
+    { key:"partidas_titular", label:"TIT",     align:"center" },
+    { key:"partidas_reserva", label:"RES",     align:"center", style:{color:C.dim} },
+    { key:"partidas_capitao", label:"CAP",     align:"center", style:{color:C.gold} },
+    { key:"gols_marcados",    label:"Gols",    align:"center", style:{color:C.gold,fontWeight:800} },
+    { key:"gols_1tempo",      label:"1ºT",     align:"center", style:{color:C.dim} },
+    { key:"gols_2tempo",      label:"2ºT",     align:"center", style:{color:C.dim} },
+    { key:"gols_penalti",     label:"Pen",     align:"center" },
+    { key:"assistencias",     label:"Assist.", align:"center", style:{color:C.win,fontWeight:700} },
+    { key:"gols_contra",      label:"GC",      align:"center", style:{color:C.loss} },
+    { key:"cartoes_amarelos", label:"🟨",      align:"center" },
+    { key:"cartoes_vermelhos",label:"🟥",      align:"center", style:{color:C.loss} },
+    { key:"minuto_medio_gol", label:"Min.Méd", align:"center", style:{color:C.dim,fontSize:12} },
   ];
   return (
     <Card style={{ padding:0, overflow:"hidden" }}>
@@ -511,7 +518,7 @@ function Estatisticas({ time }) {
         </table>
       </div>
       <div style={{ padding:"12px 24px", borderTop:`1px solid ${C.border}`, fontSize:12, color:C.dim }}>
-        PJ = Partidas Jogadas · TIT = Titular · Pen = Pênaltis · GC = Gols Contra · Clique no cabeçalho para ordenar
+        PJ=Partidas · TIT=Titular · RES=Reserva · CAP=Capitão · 1ºT/2ºT=Gols por tempo · Pen=Pênaltis · GC=Gols Contra · 🟨=Amarelos · 🟥=Vermelhos · Clique para ordenar
       </div>
     </Card>
   );

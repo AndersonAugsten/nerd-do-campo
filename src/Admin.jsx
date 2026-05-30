@@ -230,26 +230,38 @@ function useSortable(dados, defaultKey = null, defaultAsc = true) {
 
   const sorted = [...(dados||[])].sort((a, b) => {
     if (!sortKey) return 0;
-    const va = a[sortKey] ?? "";
-    const vb = b[sortKey] ?? "";
+    // Suporte a campos aninhados: "campo.nome", "cidade.nome"
+    function getVal(obj, key) {
+      if (!key) return "";
+      const parts = key.split(".");
+      let v = obj;
+      for (const p of parts) v = v?.[p];
+      return v ?? "";
+    }
+    const va = String(getVal(a, sortKey)).toLowerCase();
+    const vb = String(getVal(b, sortKey)).toLowerCase();
     if (va < vb) return asc ? -1 : 1;
     if (va > vb) return asc ? 1 : -1;
     return 0;
   });
 
-  function Th({ children, colKey, style: s = {} }) {
+  // Th como função que retorna JSX — NÃO é um componente React
+  // para evitar erro de hooks dentro de map()
+  function thEl(colKey, children, extraStyle = {}) {
     const ativo = sortKey === colKey;
     return (
-      <th onClick={() => colKey && toggleSort(colKey)}
-        style={{ padding:"10px 14px", textAlign:"left", fontSize:11, color: ativo ? C.gold : C.dim,
-          textTransform:"uppercase", fontWeight:700, whiteSpace:"nowrap", cursor: colKey ? "pointer" : "default",
-          userSelect:"none", ...s }}>
+      <th key={colKey||children} onClick={() => colKey && toggleSort(colKey)}
+        style={{ padding:"10px 14px", textAlign:"left", fontSize:11,
+          color: ativo ? C.gold : C.dim, textTransform:"uppercase",
+          fontWeight:700, whiteSpace:"nowrap",
+          cursor: colKey ? "pointer" : "default",
+          userSelect:"none", ...extraStyle }}>
         {children}{colKey ? (ativo ? (asc ? " ↑" : " ↓") : " ↕") : ""}
       </th>
     );
   }
 
-  return { sorted, Th };
+  return { sorted, th: thEl, Th: thEl };
 }
 
 
@@ -1493,16 +1505,16 @@ function CrudJogadores({ show }) {
             <Card style={{ padding:0, overflow:"hidden" }}>
               <table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
                 <thead><tr style={{ background:C.surf2 }}>
-                  <ThJA colKey="camisa">#</ThJA>
-                  <ThJA colKey="nome">Nome</ThJA>
-                  <ThJA colKey="apelido">Apelido</ThJA>
-                  <ThJA>Posição</ThJA>
-                  <ThJA colKey="telefone">Telefone</ThJA>
-                  <ThJA colKey="email">E-mail</ThJA>
-                  <ThJA colKey="data_inicio">Início</ThJA>
-                  <ThJA colKey="data_fim">Saída</ThJA>
-                  <ThJA>Obs.</ThJA>
-                  <ThJA></ThJA>
+                  {th("camisa", "#")}
+                  {th("nome", "Nome")}
+                  {th("apelido", "Apelido")}
+                  {th("posicao.nome", "Posição")}
+                  {th("telefone", "Telefone")}
+                  {th("email", "E-mail")}
+                  {th("data_inicio", "Início")}
+                  {th("data_fim", "Saída")}
+                  {th(null, "Obs.")}
+                  {th(null, "")}
                 </tr></thead>
                 <tbody>
                   {lista.map((j,i) => (
@@ -1659,13 +1671,13 @@ function CrudAdversarios({ show }) {
       <Card style={{ padding:0, overflow:"hidden" }}>
         <table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
           <thead><tr style={{ background:C.surf2 }}>
-                  <ThAdv colKey="nome">Nome</ThAdv>
-                  <ThAdv>Campo</ThAdv>
-                  <ThAdv>Cidade</ThAdv>
-                  <ThAdv colKey="contato">Contato</ThAdv>
-                  <ThAdv colKey="observacoes">Observações</ThAdv>
-                  <ThAdv colKey="data_fim">Inativo em</ThAdv>
-                  <ThAdv></ThAdv>
+                  {th("nome", "Nome")}
+                  {th("campo.nome", "Campo")}
+                  {th("cidade.nome", "Cidade")}
+                  {th("contato", "Contato")}
+                  {th("observacoes", "Observações")}
+                  {th("data_fim", "Inativo em")}
+                  {th(null, "")}
           </tr></thead>
           <tbody>
             {(adversariosOrdenados||[]).map((a,i) => (
@@ -1790,11 +1802,11 @@ function CrudCampos({ show }) {
       <Card style={{ padding:0, overflow:"hidden" }}>
         <table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
           <thead><tr style={{ background:C.surf2 }}>
-                  <ThCmp colKey="nome">Nome</ThCmp>
-                  <ThCmp colKey="endereco">Endereço</ThCmp>
-                  <ThCmp>Cidade</ThCmp>
-                  <ThCmp colKey="data_fim">Inativo em</ThCmp>
-                  <ThCmp></ThCmp>
+                  {th("nome", "Nome")}
+                  {th("endereco", "Endereço")}
+                  {th("cidade.nome", "Cidade")}
+                  {th("data_fim", "Inativo em")}
+                  {th(null, "")}
           </tr></thead>
           <tbody>
             {(camposOrdenados||[]).map((c,i) => (
@@ -1910,9 +1922,9 @@ function CrudCidades({ show }) {
       <Card style={{ padding:0, overflow:"hidden" }}>
         <table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
           <thead><tr style={{ background:C.surf2 }}>
-                  <ThCid colKey="nome">Cidade</ThCid>
-                  <ThCid colKey="estado">Estado</ThCid>
-                  <ThCid></ThCid>
+                  {th("nome", "Cidade")}
+                  {th("estado", "Estado")}
+                  {th(null, "")}
           </tr></thead>
           <tbody>
             {(cidadesOrdenadas||[]).map((c,i) => (
@@ -2037,12 +2049,12 @@ function CrudPosicoes({ show }) {
             <Card style={{ padding:0, overflow:"hidden" }}>
               <table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
                 <thead><tr style={{ background:C.surf2 }}>
-                  <ThPos colKey="nome">Nome</ThPos>
-                  <ThPos colKey="descricao">Descrição</ThPos>
-                  <ThPos colKey="ordem">Ordem</ThPos>
-                  <ThPos>Grupo pai</ThPos>
-                  <ThPos colKey="data_fim">Inativo em</ThPos>
-                  <ThPos></ThPos>
+                  {th("nome", "Nome")}
+                  {th("descricao", "Descrição")}
+                  {th("ordem", "Ordem")}
+                  {th("posicao_pai.nome", "Grupo pai")}
+                  {th("data_fim", "Inativo em")}
+                  {th(null, "")}
                 </tr></thead>
                 <tbody>
                   {lista.map((p, i) => (
@@ -2183,19 +2195,19 @@ function CrudTemporadas({ show }) {
       <Card style={{ padding:0, overflow:"hidden" }}>
         <table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
           <thead><tr style={{ background:C.surf2 }}>
-                  <ThTemp colKey="nome">Temporada</ThTemp>
-                  <ThTemp>Time</ThTemp>
-                  <ThTemp colKey="data_inicio">Início</ThTemp>
-                  <ThTemp colKey="data_fim">Fim</ThTemp>
-                  <ThTemp colKey="tecnico">Técnico</ThTemp>
-                  <ThTemp colKey="presidente">Presidente</ThTemp>
-                  <ThTemp colKey="vice_presidente">Vice-Pres.</ThTemp>
-                  <ThTemp colKey="financeiro">Financeiro</ThTemp>
-                  <ThTemp colKey="vice_financeiro">Vice-Fin.</ThTemp>
-                  <ThTemp colKey="marca_jogos">Marca Jogos</ThTemp>
-                  <ThTemp colKey="resp_redes_sociais">Redes</ThTemp>
-                  <ThTemp colKey="resp_eventos">Eventos</ThTemp>
-                  <ThTemp></ThTemp>
+                  {th("nome", "Temporada")}
+                  {th("time.nome", "Time")}
+                  {th("data_inicio", "Início")}
+                  {th("data_fim", "Fim")}
+                  {th("tecnico", "Técnico")}
+                  {th("presidente", "Presidente")}
+                  {th("vice_presidente", "Vice-Pres.")}
+                  {th("financeiro", "Financeiro")}
+                  {th("vice_financeiro", "Vice-Fin.")}
+                  {th("marca_jogos", "Marca Jogos")}
+                  {th("resp_redes_sociais", "Redes")}
+                  {th("resp_eventos", "Eventos")}
+                  {th(null, "")}
           </tr></thead>
           <tbody>
             {(temporadasOrdenadas||[]).map((t,i) => (
