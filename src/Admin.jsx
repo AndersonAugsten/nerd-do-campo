@@ -104,6 +104,120 @@ function ImageUpload({ label, value, onUpload, bucket, nomeArquivo }) {
 }
 
 // ── Paleta ────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+// MÓDULO IMPORTAÇÃO / EXPORTAÇÃO
+// ══════════════════════════════════════════════════════════════
+
+function exportarExcel(dados, colunas, nomeArquivo, instrucoes) {
+  const XLSX = window.XLSX;
+  if (!XLSX) { alert("Recarregue a página para usar esta função."); return; }
+  const wb = XLSX.utils.book_new();
+  const header = colunas.map(c => c.label);
+  const rows = dados.map(row => colunas.map(c => {
+    const val = row[c.key];
+    if (val === null || val === undefined) return "";
+    if (c.format) return c.format(val);
+    return val;
+  }));
+  const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+  ws["!cols"] = colunas.map(c => ({ wch: c.width || 20 }));
+  XLSX.utils.book_append_sheet(wb, ws, "Dados");
+  if (instrucoes) {
+    const wsInst = XLSX.utils.aoa_to_sheet([
+      ["INSTRUÇÕES DE PREENCHIMENTO"], [""],
+      ...instrucoes.map(i => [i]), [""], ["COLUNAS:"],
+      ...colunas.map(c => [`${c.label}: ${c.descricao||""}`]),
+    ]);
+    wsInst["!cols"] = [{ wch: 80 }];
+    XLSX.utils.book_append_sheet(wb, wsInst, "Instruções");
+  }
+  XLSX.writeFile(wb, `${nomeArquivo}.xlsx`);
+}
+
+function lerExcel(file) {
+  return new Promise((resolve, reject) => {
+    const XLSX = window.XLSX;
+    if (!XLSX) { reject(new Error("Biblioteca Excel não disponível")); return; }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const wb = XLSX.read(e.target.result, { type: "array", cellDates: true });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: "", raw: false });
+        resolve(rows);
+      } catch (err) { reject(err); }
+    };
+    reader.onerror = () => reject(new Error("Erro ao ler arquivo"));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function BotoesImportExport({ onExportar, onImportar, loadingImport }) {
+  const inputRef = React.useRef();
+  return (
+    <div style={{ display:"flex", gap:8 }}>
+      <button onClick={onExportar} style={{ background:"#174D36", border:"1px solid #1F5C3E", borderRadius:8, padding:"7px 14px", color:"#F0E8D0", fontFamily:"inherit", fontWeight:700, fontSize:12, cursor:"pointer", textTransform:"uppercase" }}>
+        📥 Exportar
+      </button>
+      <button onClick={() => inputRef.current?.click()} disabled={loadingImport} style={{ background:"#174D36", border:"1px solid #1F5C3E", borderRadius:8, padding:"7px 14px", color:"#F0E8D0", fontFamily:"inherit", fontWeight:700, fontSize:12, cursor:loadingImport?"not-allowed":"pointer", textTransform:"uppercase" }}>
+        📤 {loadingImport?"Validando...":"Importar"}
+      </button>
+      <input ref={inputRef} type="file" accept=".xlsx,.xls" onChange={e => { if(e.target.files[0]) onImportar(e.target.files[0]); e.target.value=""; }} style={{ display:"none" }}/>
+    </div>
+  );
+}
+
+function ModalImportacao({ resultado, onClose, onConfirmar, salvando }) {
+  if (!resultado) return null;
+  const { erros, validos, mensagem } = resultado;
+  const temErros = erros && erros.length > 0;
+  return (
+    <div style={{ position:"fixed", inset:0, background:"#00000088", display:"flex", alignItems:"center", justifyContent:"center", zIndex:600, padding:24 }}>
+      <div style={{ background:"#103D2A", borderRadius:12, border:"1px solid #1F5C3E", width:"100%", maxWidth:600, maxHeight:"80vh", display:"flex", flexDirection:"column" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"16px 20px", borderBottom:"1px solid #1F5C3E" }}>
+          <span style={{ fontWeight:700, fontSize:16, textTransform:"uppercase", color:temErros?"#E53935":"#4CAF50" }}>
+            {temErros?"❌ Erros Encontrados":"✅ Pronto para Importar"}
+          </span>
+          <button onClick={onClose} style={{ background:"none", border:"none", color:"#8FAF9A", fontSize:20, cursor:"pointer" }}>✕</button>
+        </div>
+        <div style={{ padding:20, overflowY:"auto", display:"flex", flexDirection:"column", gap:16 }}>
+          {temErros ? (
+            <>
+              <div style={{ background:"#E5393522", border:"1px solid #E5393555", borderRadius:8, padding:"12px 16px" }}>
+                <div style={{ color:"#E53935", fontWeight:700, marginBottom:4 }}>⚠️ {erros.length} erro{erros.length!==1?"s":""} — nenhum dado importado.</div>
+                <div style={{ fontSize:12, color:"#8FAF9A" }}>Corrija a planilha e tente novamente.</div>
+              </div>
+              <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                {erros.map((e,i) => (
+                  <div key={i} style={{ background:"#174D36", borderRadius:6, padding:"8px 12px", fontSize:13 }}>
+                    <span style={{ color:"#E8A020", fontWeight:700 }}>Linha {e.linha}:</span>{" "}
+                    <span style={{ color:"#F0E8D0" }}>{e.mensagem}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ background:"#4CAF5022", border:"1px solid #4CAF5055", borderRadius:8, padding:"12px 16px" }}>
+                <div style={{ color:"#4CAF50", fontWeight:700, marginBottom:4 }}>✅ {validos} registro{validos!==1?"s":""} validado{validos!==1?"s":""}</div>
+                <div style={{ fontSize:12, color:"#8FAF9A" }}>{mensagem}</div>
+              </div>
+              <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
+                <button onClick={onClose} style={{ background:"#174D36", border:"1px solid #1F5C3E", borderRadius:8, padding:"9px 18px", color:"#F0E8D0", fontFamily:"inherit", fontWeight:700, fontSize:13, cursor:"pointer", textTransform:"uppercase" }}>Cancelar</button>
+                <button onClick={onConfirmar} disabled={salvando} style={{ background:"#E8A020", border:"none", borderRadius:8, padding:"9px 18px", color:"#0B3D2E", fontFamily:"inherit", fontWeight:700, fontSize:13, cursor:salvando?"not-allowed":"pointer", textTransform:"uppercase" }}>
+                  {salvando?"Importando...":"Confirmar"}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+
 const C = {
   bg:      "#0B3D2E", surface: "#103D2A", surf2: "#174D36",
   border:  "#1F5C3E", gold: "#E8A020",    cream: "#F0E8D0",
