@@ -369,17 +369,52 @@ function Login({ onLogin }) {
 }
 
 // ── LISTA DE PARTIDAS ─────────────────────────────────────────
-function ListaPartidas({ temporada, onSelect, onNova }) {
+function ListaPartidas({ temporada, onSelect, onNova, adversarios, campos, show: onShow }) {
   const { data: partidas, loading, reload } = useQuery(
     () => api.get(`partida?id_temporada=eq.${temporada.id_temporada}&select=*,adversario(nome),campo(nome)&order=data.asc`),
     [temporada.id_temporada]
   );
 
   const [filtro, setFiltro] = useState("pendentes");
+  const [loadingImportPartida, setLoadingImportPartida] = useState(false);
+  const [resultadoImportPartida, setResultadoImportPartida] = useState(null);
+
   const all      = partidas || [];
   const pendentes = all.filter(p => p.cancelada !== "S" && p.gols_marcados === null);
   const jogados   = all.filter(p => p.cancelada !== "S" && p.gols_marcados !== null);
   const lista = filtro === "pendentes" ? pendentes : filtro === "jogados" ? jogados : all;
+
+  async function confirmarImportPartidas() {
+    try {
+      for (const row of resultadoImportPartida._dados) {
+        const adv = row._adv;
+        const campo = (campos||[]).find(c => c.nome.toUpperCase() === String(row.campo||"").trim().toUpperCase());
+        const partes = String(row.data||"").split("/");
+        const dia = partes[0]?.padStart(2,"0") || "01";
+        const mes = partes[1]?.padStart(2,"0") || "01";
+        const ano = partes[2] || new Date().getFullYear();
+        const hora = String(row.hora||"00:00");
+        const dataISO = `${ano}-${mes}-${dia}T${hora}:00`;
+        const gm = row["gols_marcados"] !== "" ? Number(row["gols_marcados"]) : null;
+        const gs = row["gols_sofridos"] !== "" ? Number(row["gols_sofridos"]) : null;
+        const body = {
+          id_temporada: temporada.id_temporada,
+          id_adversario: adv.id_adversario,
+          data: dataISO,
+          em_casa: String(row.em_casa||"NAO").toUpperCase()==="SIM"?"S":"N",
+          cancelada: String(row.cancelada||"NAO").toUpperCase()==="SIM"?"S":"N",
+          id_campo: campo?.id_campo || adv.id_campo || null,
+          gols_marcados: gm,
+          gols_sofridos: gs,
+          observacoes: row.observacoes||null,
+        };
+        if (row.id_partida) await api.patch(`partida?id_partida=eq.${row.id_partida}`, body);
+        else await api.post("partida", body);
+      }
+      onShow && onShow(`${resultadoImportPartida._dados.length} partida(s) importada(s)!`);
+      setResultadoImportPartida(null); reload();
+    } catch(e) { onShow && onShow(e.message, "error"); }
+  }
 
   if (loading) return <Spinner />;
 
@@ -482,6 +517,13 @@ function ListaPartidas({ temporada, onSelect, onNova }) {
       </div>
     </div>
   );
+}
+
+// Wrapper que busca adversarios e campos para passar à ListaPartidas
+function ListaPartidasWrapper({ temporada, onSelect, onNova, show }) {
+  const { data: adversarios } = useQuery(() => api.get(`adversario?select=*&order=nome.asc`));
+  const { data: campos }      = useQuery(() => api.get(`campo?select=*&order=nome.asc`));
+  return <ListaPartidas temporada={temporada} onSelect={onSelect} onNova={onNova} adversarios={adversarios} campos={campos} show={show}/>;
 }
 
 // ── FORM NOVA PARTIDA ─────────────────────────────────────────
@@ -1253,7 +1295,7 @@ export default function AdminAppCompleto() {
         <main style={{ flex:1, padding:"28px 28px", minWidth:0 }}>
           {menu === "partidas" && !partida && !novaPartida && temporadaSel && (<>
             {secTitle(`Partidas — ${temporadaSel.nome}`)}
-            <ListaPartidas temporada={temporadaSel} onSelect={p=>{setPartida(p);}} onNova={()=>setNovaPartida(true)} />
+            <ListaPartidasWrapper temporada={temporadaSel} onSelect={p=>{setPartida(p);}} onNova={()=>setNovaPartida(true)} show={show} />
           </>)}
 
           {menu === "partidas" && novaPartida && temporadaSel && (<>
@@ -1831,6 +1873,8 @@ function CrudPosicoes({ show }) {
   const [modal, setModal]   = useState(null);
   const [form, setForm]     = useState({});
   const [saving, setSaving] = useState(false);
+  const [loadingImport, setLoadingImport] = useState(null);
+  const [resultadoImport, setResultadoImport] = useState(null);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   function abrirNovo() { setForm({ nome:"", descricao:"", ordem:"", id_posicao_pai:"" }); setModal("novo"); }
@@ -1921,7 +1965,7 @@ function CrudPosicoes({ show }) {
           </div>
         );
       })}
-      <ModalImportacao resultado={resultadoImport} onClose={() => setResultadoImport(null)} onConfirmar={confirmarImport} salvando={saving}/>
+      <ModalImportacao resultado={resultadoImport} onClose={() => setResultadoImport(null)} onConfirmar={confirmarImportPosicoes} salvando={saving}/>
       {modal && (
         <Modal title={modal === "novo" ? "Nova Posição" : "Editar Posição"} onClose={() => setModal(null)}>
           <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
@@ -1954,6 +1998,8 @@ function CrudTemporadas({ show }) {
   const [modal, setModal]   = useState(null);
   const [form, setForm]     = useState({});
   const [saving, setSaving] = useState(false);
+  const [loadingImport, setLoadingImport] = useState(null);
+  const [resultadoImport, setResultadoImport] = useState(null);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   function abrirNovo() {
