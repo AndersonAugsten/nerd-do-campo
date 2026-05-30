@@ -87,7 +87,7 @@ function fmtHora(ts) { return ts ? new Date(ts).toLocaleTimeString("pt-BR", { ho
 
 // ── SELETOR DE TIMES ──────────────────────────────────────────
 function SeletorTimes({ onSelect }) {
-  const { data: times, loading } = useQuery(() => sb(`time?select=*,temporada(nome,data_inicio,data_fim)&data_fim=is.null&order=nome.asc`));
+  const { data: times, loading } = useQuery(() => sb(`time?select=*,temporada(nome,data_inicio,data_fim)&data_fim=is.null&publico=eq.true&order=nome.asc`));
 
   if (loading) return (
     <div style={{ minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'Oswald','Arial Narrow',Arial,sans-serif" }}>
@@ -160,7 +160,7 @@ function VisaoGeral({ temporada }) {
   const gm = jogadas.reduce((a,p) => a + (p.gols_marcados||0), 0);
   const gs = jogadas.reduce((a,p) => a + (p.gols_sofridos||0), 0);
   const pts = v*3+e;
-  const pct = jogadas.length > 0 ? Math.round((v/jogadas.length)*100) : 0;
+  const pct = jogadas.length > 0 ? Math.round((pts/(jogadas.length*3))*100) : 0;
   const ultima  = [...jogadas].reverse()[0];
   const proxima = (partidas||[]).find(p => p.cancelada !== "S" && p.gols_marcados === null);
   const maxGols   = topGols?.[0]?.gols_marcados || 1;
