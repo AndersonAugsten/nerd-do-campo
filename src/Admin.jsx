@@ -1875,6 +1875,18 @@ function CrudPosicoes({ show }) {
   const [saving, setSaving] = useState(false);
   const [loadingImport, setLoadingImport] = useState(null);
   const [resultadoImport, setResultadoImport] = useState(null);
+
+  async function confirmarImportPosicoes() {
+    setSaving(true);
+    try {
+      for (const row of resultadoImport._dados) {
+        const body = { nome: String(row.nome||"").trim(), id_posicao_pai: row.id_grupo ? Number(row.id_grupo) : null };
+        if (row.id_posicao) await api.patch(`posicao?id_posicao=eq.${row.id_posicao}`, body);
+        else await api.post("posicao", body);
+      }
+      show(`${resultadoImport._dados.length} registro(s) importado(s)!`); setResultadoImport(null); reload();
+    } catch(e) { show(e.message, "error"); } finally { setSaving(false); }
+  }
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   function abrirNovo() { setForm({ nome:"", descricao:"", ordem:"", id_posicao_pai:"" }); setModal("novo"); }
@@ -2000,6 +2012,20 @@ function CrudTemporadas({ show }) {
   const [saving, setSaving] = useState(false);
   const [loadingImport, setLoadingImport] = useState(null);
   const [resultadoImport, setResultadoImport] = useState(null);
+
+  async function confirmarImportTemporadas() {
+    setSaving(true);
+    try {
+      const utData = await api.get(`usuario_time?select=id_time&limit=1`);
+      const id_time_val = utData?.[0]?.id_time || null;
+      for (const row of resultadoImport._dados) {
+        const body = { nome: String(row.nome||"").trim(), data_inicio: row.data_inicio||null, data_fim: row.data_fim||null, tecnico: row.tecnico||null, presidente: row.presidente||null, id_time: id_time_val };
+        if (row.id_temporada) await api.patch(`temporada?id_temporada=eq.${row.id_temporada}`, body);
+        else await api.post("temporada", body);
+      }
+      show(`${resultadoImport._dados.length} temporada(s) importada(s)!`); setResultadoImport(null); reload();
+    } catch(e) { show(e.message, "error"); } finally { setSaving(false); }
+  }
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   function abrirNovo() {
@@ -2059,7 +2085,7 @@ function CrudTemporadas({ show }) {
         />
         <Btn onClick={abrirNovo}>+ Nova Temporada</Btn>
       </div>
-      <ModalImportacao resultado={resultadoImport} onClose={() => setResultadoImport(null)} onConfirmar={confirmarImport} salvando={saving}/>
+      <ModalImportacao resultado={resultadoImport} onClose={() => setResultadoImport(null)} onConfirmar={confirmarImportTemporadas} salvando={saving}/>
       <Card style={{ padding:0, overflow:"hidden" }}>
         <table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
           <thead><tr style={{ background:C.surf2 }}>
