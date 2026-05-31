@@ -2901,30 +2901,42 @@ function CrudTemporadas({ show }) {
             {/* Uniformes */}
             <div style={{ fontSize:11, color:C.gold, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700, marginTop:4 }}>Uniformes</div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
-              {[
-                { key:"uniforme_1_url", label:"👕 Uniforme 1" },
-                { key:"uniforme_2_url", label:"👕 Uniforme 2" },
-                { key:"uniforme_3_url", label:"🧤 Uniforme 3" },
-              ].map(({ key, label }) => (
-                <div key={key} style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                  <div style={{ fontSize:11, color:C.dim, fontWeight:700 }}>{label}</div>
-                  {form[key] && (
-                    <img src={form[key]} alt={label}
-                      style={{ width:"100%", height:80, objectFit:"contain", borderRadius:8, background:C.surf2, border:`1px solid ${C.border}` }}/>
-                  )}
-                  <ImageUpload
-                    bucket="uniformes"
-                    onUpload={url => set(key, url)}
-                    style={{ fontSize:11, padding:"4px 10px" }}
-                  />
-                  {form[key] && (
-                    <button onClick={() => set(key, null)}
-                      style={{ background:"none", border:"none", color:C.loss, cursor:"pointer", fontSize:11 }}>
-                      ✕ Remover
-                    </button>
-                  )}
-                </div>
-              ))}
+              {/* Uniforme 1 */}
+              <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                <div style={{ fontSize:11, color:C.dim, fontWeight:700 }}>👕 Uniforme 1</div>
+                {form.uniforme_1_url && (
+                  <img src={form.uniforme_1_url} alt="Uniforme 1"
+                    style={{ width:"100%", height:80, objectFit:"contain", borderRadius:8, background:C.surf2, border:`1px solid ${C.border}` }}/>
+                )}
+                <ImageUpload bucket="uniformes" value={form.uniforme_1_url} onUpload={url => set("uniforme_1_url", url)}/>
+                {form.uniforme_1_url && (
+                  <button onClick={() => set("uniforme_1_url", null)} style={{ background:"none", border:"none", color:C.loss, cursor:"pointer", fontSize:11 }}>✕ Remover</button>
+                )}
+              </div>
+              {/* Uniforme 2 */}
+              <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                <div style={{ fontSize:11, color:C.dim, fontWeight:700 }}>👕 Uniforme 2</div>
+                {form.uniforme_2_url && (
+                  <img src={form.uniforme_2_url} alt="Uniforme 2"
+                    style={{ width:"100%", height:80, objectFit:"contain", borderRadius:8, background:C.surf2, border:`1px solid ${C.border}` }}/>
+                )}
+                <ImageUpload bucket="uniformes" value={form.uniforme_2_url} onUpload={url => set("uniforme_2_url", url)}/>
+                {form.uniforme_2_url && (
+                  <button onClick={() => set("uniforme_2_url", null)} style={{ background:"none", border:"none", color:C.loss, cursor:"pointer", fontSize:11 }}>✕ Remover</button>
+                )}
+              </div>
+              {/* Uniforme 3 */}
+              <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                <div style={{ fontSize:11, color:C.dim, fontWeight:700 }}>🧤 Uniforme 3</div>
+                {form.uniforme_3_url && (
+                  <img src={form.uniforme_3_url} alt="Uniforme 3"
+                    style={{ width:"100%", height:80, objectFit:"contain", borderRadius:8, background:C.surf2, border:`1px solid ${C.border}` }}/>
+                )}
+                <ImageUpload bucket="uniformes" value={form.uniforme_3_url} onUpload={url => set("uniforme_3_url", url)}/>
+                {form.uniforme_3_url && (
+                  <button onClick={() => set("uniforme_3_url", null)} style={{ background:"none", border:"none", color:C.loss, cursor:"pointer", fontSize:11 }}>✕ Remover</button>
+                )}
+              </div>
             </div>
 
             {/* Toggle público temporada */}
