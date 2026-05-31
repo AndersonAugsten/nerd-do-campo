@@ -929,7 +929,10 @@ function Login({ onLogin }) {
     <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Oswald','Arial Narrow',Arial,sans-serif" }}>
       <Card style={{ width: 380, padding: 40 }}>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div style={{ fontSize: 28, fontWeight: 800, color: C.cream, textTransform: "uppercase", letterSpacing: "0.08em" }}>⚽ Nerd do Campo</div>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:12, marginBottom:4 }}>
+            <img src="/logo.png" alt="Nerd do Campo" style={{ width:64, height:64, borderRadius:"50%", objectFit:"cover" }}/>
+          </div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: C.cream, textTransform: "uppercase", letterSpacing: "0.08em" }}>Nerd do Campo</div>
           <div style={{ fontSize: 12, color: C.gold, marginTop: 4, textTransform: "uppercase", letterSpacing: "0.12em" }}>Painel Admin</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -1827,7 +1830,8 @@ export default function AdminAppCompleto() {
 
       {/* Header */}
       <header style={{ background:"#091F15", borderBottom:`3px solid ${C.gold}`, padding:"0 24px", display:"flex", alignItems:"center", gap:16, height:64, position:"sticky", top:0, zIndex:100, boxShadow:"0 4px 20px #00000066" }}>
-        <div style={{ fontSize:18, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:C.cream }}>⚽ Nerd do Campo</div>
+        <img src="/logo.png" alt="Nerd do Campo" style={{ width:36, height:36, borderRadius:"50%", objectFit:"cover", border:`2px solid ${C.gold}` }}/>
+        <div style={{ fontSize:18, fontWeight:800, letterSpacing:"0.06em", textTransform:"uppercase", color:C.cream }}>Nerd do Campo</div>
         <div style={{ fontSize:11, color:C.gold, textTransform:"uppercase", letterSpacing:"0.1em", background:C.gold+"22", border:`1px solid ${C.gold}44`, borderRadius:6, padding:"2px 8px" }}>Admin</div>
         <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:12 }}>
           {time?.escudo_url

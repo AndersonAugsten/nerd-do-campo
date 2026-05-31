@@ -21,19 +21,8 @@ const C = {
 
 function Logo({ size = 44 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
-      <rect x="18" y="14" width="58" height="62" rx="5" fill="#174D36" stroke="#F0E8D0" strokeWidth="2"/>
-      <rect x="38" y="8" width="24" height="12" rx="3" fill="#E8A020"/>
-      <circle cx="50" cy="14" r="4" fill="#0B3D2E"/>
-      <rect x="26" y="30" width="36" height="38" rx="1" stroke="#F0E8D0" strokeWidth="1.5" fill="none"/>
-      <line x1="44" y1="30" x2="44" y2="68" stroke="#F0E8D0" strokeWidth="1"/>
-      <line x1="26" y1="49" x2="62" y2="49" stroke="#F0E8D0" strokeWidth="1"/>
-      <circle cx="70" cy="65" r="18" fill="#1A1A1A"/>
-      <circle cx="63" cy="62" r="5" fill="#F0E8D0"/>
-      <circle cx="77" cy="62" r="5" fill="#F0E8D0"/>
-      <rect x="59" y="58" width="22" height="4" rx="2" fill="#1A1A1A"/>
-      <line x1="65" y1="61" x2="75" y2="61" stroke="#555" strokeWidth="1.5"/>
-    </svg>
+    <img src="/logo.png" alt="Nerd do Campo"
+      style={{ width:size, height:size, borderRadius:"50%", objectFit:"cover", flexShrink:0 }}/>
   );
 }
 
@@ -650,16 +639,24 @@ function TimeApp({ time, onVoltar }) {
       {/* Header compacto */}
       <header style={{ background:"#091F15", borderBottom:`3px solid ${C.gold}`, padding:"0 12px", display:"flex", alignItems:"center", gap:10, height:56, position:"sticky", top:0, zIndex:100, boxShadow:"0 4px 24px #00000066" }}>
         <button onClick={onVoltar} style={{ background:"none", border:"none", cursor:"pointer", padding:"4px 8px 4px 0", color:C.dim, fontSize:24, lineHeight:1, flexShrink:0 }}>‹</button>
-        {time.escudo_url && <img src={time.escudo_url} alt={time.nome} style={{ width:32, height:32, borderRadius:"50%", objectFit:"cover", border:`2px solid ${C.gold}`, flexShrink:0 }}/>}
+        <img src="/logo.png" alt="Nerd do Campo" style={{ width:30, height:30, borderRadius:"50%", objectFit:"cover", flexShrink:0 }}/>
+        {time.escudo_url && <img src={time.escudo_url} alt={time.nome} style={{ width:30, height:30, borderRadius:"50%", objectFit:"cover", border:`2px solid ${C.gold}`, flexShrink:0 }}/>}
         <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontSize:14, fontWeight:800, textTransform:"uppercase", color:C.cream, lineHeight:1.1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{time.nome}</div>
-          <div style={{ fontSize:10, color:C.gold, textTransform:"uppercase", letterSpacing:"0.06em" }}>{temporadaSel?.nome||""}</div>
+          <div style={{ fontSize:13, fontWeight:800, textTransform:"uppercase", color:C.cream, lineHeight:1.1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{time.nome}</div>
         </div>
-        {(temporadas||[]).length > 1 && (
-          <select value={temporadaSel?.id_temporada||""} onChange={e=>setTemporadaSel(temporadas.find(t=>t.id_temporada===Number(e.target.value)))}
-            style={{ background:C.surf2, color:C.cream, border:`1px solid ${C.border}`, borderRadius:6, padding:"4px 8px", fontFamily:"inherit", fontSize:11, maxWidth:120, flexShrink:0 }}>
-            {(temporadas||[]).map(t=><option key={t.id_temporada} value={t.id_temporada}>{t.nome}</option>)}
-          </select>
+        {(temporadas||[]).length > 0 && (
+          <div style={{ display:"flex", gap:4, flexShrink:0, flexWrap:"nowrap", overflowX:"auto", maxWidth:200 }}>
+            {(temporadas||[]).map(t => (
+              <button key={t.id_temporada} onClick={() => setTemporadaSel(t)}
+                style={{ background: temporadaSel?.id_temporada === t.id_temporada ? C.gold : "transparent",
+                  color: temporadaSel?.id_temporada === t.id_temporada ? "#0B3D2E" : C.dim,
+                  border:`1px solid ${temporadaSel?.id_temporada === t.id_temporada ? C.gold : C.border}`,
+                  borderRadius:6, padding:"3px 8px", fontFamily:"inherit", fontWeight:700,
+                  fontSize:10, cursor:"pointer", textTransform:"uppercase", whiteSpace:"nowrap", flexShrink:0 }}>
+                {t.nome}
+              </button>
+            ))}
+          </div>
         )}
       </header>
 
