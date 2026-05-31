@@ -145,8 +145,8 @@ function VisaoGeral({ temporada }) {
     () => sb(`partida?id_temporada=eq.${temporada.id_temporada}&select=*,adversario(nome),campo(nome)&order=data.asc`),
     [temporada.id_temporada]
   );
-  const { data: topGols }   = useQuery(() => sb(`vw_estatisticas_jogadores?gols_marcados=not.is.null&order=gols_marcados.desc&limit=5`), []);
-  const { data: topAssist } = useQuery(() => sb(`vw_estatisticas_jogadores?assistencias=not.is.null&order=assistencias.desc&limit=5`), []);
+  const { data: topGols }   = useQuery(() => sb(`vw_stats_temporada?id_temporada=eq.${temporada.id_temporada}&select=*&order=gols_marcados.desc&limit=5`), [temporada.id_temporada]);
+  const { data: topAssist } = useQuery(() => sb(`vw_stats_temporada?id_temporada=eq.${temporada.id_temporada}&select=*&order=assistencias.desc&limit=5`), [temporada.id_temporada]);
 
   if (loading) return <Spinner />;
 
@@ -455,11 +455,12 @@ function Elenco({ time }) {
   );
 }
 
-function Estatisticas({ time }) {
+function Estatisticas({ time, temporada }) {
   const [sortKey, setSortKey] = useState("gols_marcados");
   const [asc, setAsc] = useState(false);
   const { data: stats, loading } = useQuery(
-    () => sb(`vw_estatisticas_jogadores?select=*`), [time.id_time]
+    () => temporada?.id_temporada ? sb(`vw_stats_temporada?id_temporada=eq.${temporada.id_temporada}&select=*`) : sb(`vw_estatisticas_jogadores?id_time=eq.${time.id_time}&select=*`),
+    [temporada?.id_temporada, time.id_time]
   );
   if (loading) return <Spinner />;
   const sorted = [...(stats||[])].sort((a,b) => {
@@ -519,7 +520,7 @@ function Estatisticas({ time }) {
 
 function Gols({ temporada }) {
   const [filtroPartida, setFiltroPartida] = useState("todos");
-  const { data: gols, loading } = useQuery(() => sb(`vw_gols_partida?select=*&order=data_partida.asc,periodo.asc,minuto.asc`), []);
+  const { data: gols, loading } = useQuery(() => sb(`vw_gols_partida?id_temporada=eq.${temporada.id_temporada}&select=*&order=data_partida.asc,periodo.asc,minuto.asc`), [temporada.id_temporada]);
   const { data: partidas } = useQuery(
     () => sb(`partida?id_temporada=eq.${temporada.id_temporada}&select=id_partida,data,adversario(nome)&cancelada=eq.N&gols_marcados=not.is.null&order=data.asc`),
     [temporada.id_temporada]
@@ -549,7 +550,7 @@ function Gols({ temporada }) {
                 <tr key={i} style={{ background:i%2===0?C.surface:C.bg }}
                   onMouseEnter={e=>e.currentTarget.style.background=C.surf2}
                   onMouseLeave={e=>e.currentTarget.style.background=i%2===0?C.surface:C.bg}>
-                  <td style={{ padding:"12px 14px", color:C.dim, fontSize:13, whiteSpace:"nowrap" }}>{g.data_partida}</td>
+                  <td style={{ padding:"12px 14px", color:C.dim, fontSize:13, whiteSpace:"nowrap" }}>{fmtDataA(g.data_partida)}</td>
                   <td style={{ padding:"12px 14px", fontWeight:700 }}>{g.adversario}</td>
                   <td style={{ padding:"12px 14px" }}>
                     <span style={{ color:C.gold, fontWeight:700 }}>⚽ {g.jogador}</span>
@@ -592,7 +593,7 @@ function VisaoAppPublico({ time, temporadas }) {
     <VisaoGeral    key="vg"   temporada={temporadaSel}/>,
     <Calendario    key="cal"  temporada={temporadaSel}/>,
     <Elenco        key="el"   time={time}/>,
-    <Estatisticas  key="st"   time={time}/>,
+    <Estatisticas  key="st"   time={time} temporada={temporadaSel}/>,
     <Gols          key="gols" temporada={temporadaSel}/>,
   ];
 

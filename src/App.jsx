@@ -489,11 +489,11 @@ function Elenco({ time }) {
 }
 
 // ── ESTATÍSTICAS ──────────────────────────────────────────────
-function Estatisticas({ time }) {
+function Estatisticas({ time, temporada }) {
   const [sortKey, setSortKey] = useState("gols_marcados");
   const [asc, setAsc] = useState(false);
   const { data: stats, loading } = useQuery(
-    () => temporada ? sb(`vw_stats_temporada?id_temporada=eq.${temporada.id_temporada}&select=*`) : sb(`vw_estatisticas_jogadores?id_time=eq.${time.id_time}&select=*`),
+    () => temporada?.id_temporada ? sb(`vw_stats_temporada?id_temporada=eq.${temporada.id_temporada}&select=*`) : sb(`vw_estatisticas_jogadores?id_time=eq.${time.id_time}&select=*`),
     [temporada?.id_temporada, time.id_time]
   );
   if (loading) return <Spinner />;
@@ -585,7 +585,7 @@ function Gols({ temporada }) {
                 <tr key={i} style={{ background:i%2===0?C.surface:C.bg }}
                   onMouseEnter={e=>e.currentTarget.style.background=C.surf2}
                   onMouseLeave={e=>e.currentTarget.style.background=i%2===0?C.surface:C.bg}>
-                  <td style={{ padding:"12px 14px", color:C.dim, fontSize:13, whiteSpace:"nowrap" }}>{g.data_partida}</td>
+                  <td style={{ padding:"12px 14px", color:C.dim, fontSize:13, whiteSpace:"nowrap" }}>{fmtData(g.data_partida)}</td>
                   <td style={{ padding:"12px 14px", fontWeight:700 }}>{g.adversario}</td>
                   <td style={{ padding:"12px 14px" }}>
                     <span style={{ color:C.gold, fontWeight:700 }}>⚽ {g.jogador}</span>
@@ -630,7 +630,7 @@ function TimeApp({ time, onVoltar }) {
     <VisaoGeral   key="vg"    temporada={temporadaSel}/>,
     <Calendario   key="cal"   temporada={temporadaSel}/>,
     <Elenco       key="el"    time={time}/>,
-    <Estatisticas key="st"    time={time}/>,
+    <Estatisticas key="st"    time={time} temporada={temporadaSel}/>,
     <Gols         key="gols"  temporada={temporadaSel}/>,
   ] : [<Spinner key="s"/>];
 
