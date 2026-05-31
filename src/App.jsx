@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 
 // ── Supabase ──────────────────────────────────────────────────
 const SUPABASE_URL = "https://nxztffulmvohduvudbhg.supabase.co";
@@ -88,12 +88,12 @@ function fmtHora(ts) { return ts ? new Date(ts).toLocaleTimeString("pt-BR", { ho
 // ── SELETOR DE TIMES ──────────────────────────────────────────
 function SeletorTimes({ onSelect }) {
   const hoje = new Date().toISOString().split('T')[0];
-  const [dataRef, setDataRef] = React.useState(hoje);
+  const [dataRef, setDataRef] = useState(hoje);
 
   const { data: allTimes, loading } = useQuery(() => sb(`time?select=*,temporada(id_temporada,nome,data_inicio,data_fim,publico)&publico=eq.true&order=nome.asc`));
 
   // Só mostrar times com pelo menos 1 temporada pública
-  const times = React.useMemo(() => {
+  const times = useMemo(() => {
     if (!allTimes) return [];
     return allTimes.filter(t => (t.temporada||[]).some(temp => temp.publico === true));
   }, [allTimes]);

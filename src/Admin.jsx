@@ -2805,22 +2805,22 @@ function CrudTemporadas({ show }) {
               <Input label="Resp. Redes"      value={form.resp_redes_sociais||""} onChange={e => set("resp_redes_sociais", e.target.value)} />
               <Input label="Resp. Eventos"    value={form.resp_eventos||""}     onChange={e => set("resp_eventos",     e.target.value)} />
             </div>
-        {/* Toggle público temporada */}
-        <div style={{ background: form.publico !== false ? C.win+"11" : C.loss+"11", border:`1px solid ${form.publico !== false ? C.win+"44" : C.loss+"44"}`, borderRadius:10, padding:"14px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
-          <div>
-            <div style={{ fontWeight:700, fontSize:13, color: form.publico !== false ? C.win : C.loss, marginBottom:2 }}>
-              {form.publico !== false ? "🌐 Temporada Pública" : "🔒 Temporada Privada"}
-            </div>
-            <div style={{ fontSize:11, color:C.dim }}>
-              {form.publico !== false ? "Aparece no app público." : "Não aparece no app público."}
-            </div>
-          </div>
-          <button onClick={() => set("publico", form.publico === false ? true : false)}
-            style={{ flexShrink:0, width:48, height:26, borderRadius:13, border:"none", cursor:"pointer", position:"relative", background: form.publico !== false ? C.win : C.dim, transition:"background 0.2s" }}>
-            <span style={{ position:"absolute", top:3, left: form.publico !== false ? 24 : 3, width:20, height:20, borderRadius:"50%", background:"white", transition:"left 0.2s", display:"block" }}/>
-          </button>
-        </div>
             <Input label="Observações" value={form.observacoes||""} onChange={e => set("observacoes", e.target.value)} />
+            {/* Toggle público temporada */}
+            <div style={{ background: form.publico !== false ? C.win+"11" : C.loss+"11", border:`1px solid ${form.publico !== false ? C.win+"44" : C.loss+"44"}`, borderRadius:10, padding:"14px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
+              <div>
+                <div style={{ fontWeight:700, fontSize:13, color: form.publico !== false ? C.win : C.loss, marginBottom:2 }}>
+                  {form.publico !== false ? "🌐 Temporada Pública" : "🔒 Temporada Privada"}
+                </div>
+                <div style={{ fontSize:11, color:C.dim }}>
+                  {form.publico !== false ? "Aparece no app público." : "Não aparece no app público."}
+                </div>
+              </div>
+              <button onClick={() => set("publico", form.publico === false ? true : false)}
+                style={{ flexShrink:0, width:48, height:26, borderRadius:13, border:"none", cursor:"pointer", position:"relative", background: form.publico !== false ? C.win : C.dim, transition:"background 0.2s" }}>
+                <span style={{ position:"absolute", top:3, left: form.publico !== false ? 24 : 3, width:20, height:20, borderRadius:"50%", background:"white", transition:"left 0.2s", display:"block" }}/>
+              </button>
+            </div>
             <div style={{ display:"flex", justifyContent:"flex-end", gap:10, marginTop:8 }}>
               <Btn variant="secondary" onClick={() => setModal(null)}>Cancelar</Btn>
               <Btn onClick={salvar} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Btn>
