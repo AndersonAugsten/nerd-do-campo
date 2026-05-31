@@ -149,7 +149,6 @@ function SeletorTimes({ onSelect }) {
 
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(260px,1fr))", gap:16 }}>
           {(times||[]).map(t => {
-            const temp = t.temporada?.[0];
             return (
               <div key={t.id_time}
                 onClick={() => onSelect(t)}
@@ -160,9 +159,22 @@ function SeletorTimes({ onSelect }) {
                   ? <img src={t.escudo_url} alt={t.nome} style={{ width:72, height:72, borderRadius:"50%", objectFit:"cover", border:`2px solid ${C.gold}`, margin:"0 auto 16px", display:"block" }}/>
                   : <div style={{ width:72, height:72, borderRadius:"50%", background:C.surf2, border:`2px solid ${C.gold}`, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 16px", fontSize:28 }}>⚽</div>
                 }
-                <div style={{ fontSize:18, fontWeight:800, textTransform:"uppercase", marginBottom:6 }}>{t.nome}</div>
-                {temp && <div style={{ fontSize:12, color:C.gold, textTransform:"uppercase", letterSpacing:"0.08em" }}>{temp.nome}</div>}
-                {t.data_fundacao && <div style={{ fontSize:11, color:C.dim, marginTop:4 }}>Fundado em {new Date(t.data_fundacao).getFullYear()}</div>}
+                <div style={{ fontSize:18, fontWeight:800, textTransform:"uppercase", marginBottom:8 }}>{t.nome}</div>
+                {t.data_fundacao && (
+                  <div style={{ fontSize:11, color:C.dim, marginBottom:6 }}>
+                    Fundado em {new Date(t.data_fundacao).getFullYear()}
+                  </div>
+                )}
+                {t.marca_jogos && (
+                  <div style={{ fontSize:12, color:C.dim, marginBottom:4 }}>
+                    📋 <span style={{ color:C.cream }}>Marca jogos:</span> {t.marca_jogos}
+                  </div>
+                )}
+                {t.telefone && (
+                  <div style={{ fontSize:12, color:C.dim }}>
+                    📞 <span style={{ color:C.cream }}>{t.telefone}</span>
+                  </div>
+                )}
               </div>
             );
           })}
