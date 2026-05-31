@@ -87,7 +87,16 @@ function fmtHora(ts) { return ts ? new Date(ts).toLocaleTimeString("pt-BR", { ho
 
 // ── SELETOR DE TIMES ──────────────────────────────────────────
 function SeletorTimes({ onSelect }) {
-  const { data: times, loading } = useQuery(() => sb(`time?select=*,temporada(nome,data_inicio,data_fim)&data_fim=is.null&publico=eq.true&order=nome.asc`));
+  const hoje = new Date().toISOString().split('T')[0];
+  const [dataRef, setDataRef] = React.useState(hoje);
+
+  const { data: allTimes, loading } = useQuery(() => sb(`time?select=*,temporada(id_temporada,nome,data_inicio,data_fim,publico)&publico=eq.true&order=nome.asc`));
+
+  // Só mostrar times com pelo menos 1 temporada pública
+  const times = React.useMemo(() => {
+    if (!allTimes) return [];
+    return allTimes.filter(t => (t.temporada||[]).some(temp => temp.publico === true));
+  }, [allTimes]);
 
   if (loading) return (
     <div style={{ minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'Oswald','Arial Narrow',Arial,sans-serif" }}>
@@ -592,7 +601,7 @@ const TABS = [
 function TimeApp({ time, onVoltar }) {
   const [tab, setTab] = useState(0);
   const { data: temporadas } = useQuery(
-    () => sb(`temporada?id_time=eq.${time.id_time}&select=*&order=data_inicio.desc`),
+    () => sb(`temporada?id_time=eq.${time.id_time}&select=*&publico=eq.true&order=data_inicio.desc`),
     [time.id_time]
   );
   const [temporadaSel, setTemporadaSel] = useState(null);

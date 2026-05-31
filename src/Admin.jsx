@@ -2665,7 +2665,7 @@ function CrudTemporadas({ show }) {
       const utData = await api.get(`usuario_time?select=id_time&limit=1`);
       const id_time_val = utData?.[0]?.id_time || null;
       for (const row of resultadoImport._dados) {
-        const body = { nome: String(row.nome||"").trim(), data_inicio: row.data_inicio||null, data_fim: row.data_fim||null, tecnico: row.tecnico||null, presidente: row.presidente||null, vice_presidente: row.vice_presidente||null, financeiro: row.financeiro||null, vice_financeiro: row.vice_financeiro||null, marca_jogos: row.marca_jogos||null, resp_redes_sociais: row.resp_redes_sociais||null, resp_eventos: row.resp_eventos||null, id_time: id_time_val };
+        const body = { nome: String(row.nome||"").trim(), data_inicio: row.data_inicio||null, data_fim: row.data_fim||null, publico: row.publico !== "NAO" && row.publico !== false, tecnico: row.tecnico||null, presidente: row.presidente||null, vice_presidente: row.vice_presidente||null, financeiro: row.financeiro||null, vice_financeiro: row.vice_financeiro||null, marca_jogos: row.marca_jogos||null, resp_redes_sociais: row.resp_redes_sociais||null, resp_eventos: row.resp_eventos||null, id_time: id_time_val };
         if (row.id_temporada) await api.patch(`temporada?id_temporada=eq.${row.id_temporada}`, body);
         else await api.post("temporada", body);
       }
@@ -2676,16 +2676,16 @@ function CrudTemporadas({ show }) {
 
   function abrirNovo() {
     const t = times?.[0];
-    setForm({ nome:"", id_time: t ? String(t.id_time) : "", data_inicio:"", data_fim:"", tecnico: t?.tecnico||"", presidente: t?.presidente||"", vice_presidente: t?.vice_presidente||"", financeiro: t?.financeiro||"", vice_financeiro: t?.vice_financeiro||"", marca_jogos: t?.marca_jogos||"", resp_redes_sociais: t?.resp_redes_sociais||"", resp_eventos: t?.resp_eventos||"", observacoes:"" });
+    setForm({ nome:"", id_time: t ? String(t.id_time) : "", data_inicio:"", data_fim:"", publico: true, tecnico: t?.tecnico||"", presidente: t?.presidente||"", vice_presidente: t?.vice_presidente||"", financeiro: t?.financeiro||"", vice_financeiro: t?.vice_financeiro||"", marca_jogos: t?.marca_jogos||"", resp_redes_sociais: t?.resp_redes_sociais||"", resp_eventos: t?.resp_eventos||"", observacoes:"" });
     setModal("novo");
   }
-  function abrirEditar(t) { setForm({ ...t, id_time: t.id_time ? String(t.id_time) : "" }); setModal(t); }
+  function abrirEditar(t) { setForm({ ...t, publico: t.publico !== false, id_time: t.id_time ? String(t.id_time) : "" }); setModal(t); }
 
   async function salvar() {
     if (!form.nome || !form.data_inicio || !form.data_fim) { show("Nome e datas são obrigatórios.", "error"); return; }
     setSaving(true);
     try {
-      const body = { nome: form.nome, id_time: form.id_time ? Number(form.id_time) : null, data_inicio: form.data_inicio, data_fim: form.data_fim, tecnico: form.tecnico||null, presidente: form.presidente||null, vice_presidente: form.vice_presidente||null, financeiro: form.financeiro||null, vice_financeiro: form.vice_financeiro||null, marca_jogos: form.marca_jogos||null, resp_redes_sociais: form.resp_redes_sociais||null, resp_eventos: form.resp_eventos||null, observacoes: form.observacoes||null };
+      const body = { nome: form.nome, id_time: form.id_time ? Number(form.id_time) : null, data_inicio: form.data_inicio, data_fim: form.data_fim, publico: form.publico !== false, tecnico: form.tecnico||null, presidente: form.presidente||null, vice_presidente: form.vice_presidente||null, financeiro: form.financeiro||null, vice_financeiro: form.vice_financeiro||null, marca_jogos: form.marca_jogos||null, resp_redes_sociais: form.resp_redes_sociais||null, resp_eventos: form.resp_eventos||null, observacoes: form.observacoes||null };
       if (modal === "novo") await api.post("temporada", body);
       else await api.patch(`temporada?id_temporada=eq.${form.id_temporada}`, body);
       show("Salvo!"); setModal(null); reload();
@@ -2753,6 +2753,7 @@ function CrudTemporadas({ show }) {
                   <ThSortable colKey="marca_jogos" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Marca Jogos</ThSortable>
                   <ThSortable colKey="resp_redes_sociais" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Redes</ThSortable>
                   <ThSortable colKey="resp_eventos" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Eventos</ThSortable>
+                  <ThSortable colKey="publico" sortKey={_sk} asc={_asc} onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}>Público</ThSortable>
                   <ThSortable sortKey={_sk} asc={_asc} onSort={()=>{}}></ThSortable>
           </tr></thead>
           <tbody>
@@ -2770,6 +2771,9 @@ function CrudTemporadas({ show }) {
                 <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{t.marca_jogos || "—"}</td>
                 <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{t.resp_redes_sociais || "—"}</td>
                 <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{t.resp_eventos || "—"}</td>
+                <td style={{ padding:"11px 14px", textAlign:"center" }}>
+                  <span style={{ color: t.publico !== false ? C.win : C.dim, fontWeight:700, fontSize:12 }}>{t.publico !== false ? "🌐" : "🔒"}</span>
+                </td>
                 <td style={{ padding:"11px 14px" }}><Btn variant="secondary" style={{ fontSize:11, padding:"5px 10px" }} onClick={() => abrirEditar(t)}>Editar</Btn></td>
               </tr>
             ))}
@@ -2801,6 +2805,21 @@ function CrudTemporadas({ show }) {
               <Input label="Resp. Redes"      value={form.resp_redes_sociais||""} onChange={e => set("resp_redes_sociais", e.target.value)} />
               <Input label="Resp. Eventos"    value={form.resp_eventos||""}     onChange={e => set("resp_eventos",     e.target.value)} />
             </div>
+        {/* Toggle público temporada */}
+        <div style={{ background: form.publico !== false ? C.win+"11" : C.loss+"11", border:`1px solid ${form.publico !== false ? C.win+"44" : C.loss+"44"}`, borderRadius:10, padding:"14px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
+          <div>
+            <div style={{ fontWeight:700, fontSize:13, color: form.publico !== false ? C.win : C.loss, marginBottom:2 }}>
+              {form.publico !== false ? "🌐 Temporada Pública" : "🔒 Temporada Privada"}
+            </div>
+            <div style={{ fontSize:11, color:C.dim }}>
+              {form.publico !== false ? "Aparece no app público." : "Não aparece no app público."}
+            </div>
+          </div>
+          <button onClick={() => set("publico", form.publico === false ? true : false)}
+            style={{ flexShrink:0, width:48, height:26, borderRadius:13, border:"none", cursor:"pointer", position:"relative", background: form.publico !== false ? C.win : C.dim, transition:"background 0.2s" }}>
+            <span style={{ position:"absolute", top:3, left: form.publico !== false ? 24 : 3, width:20, height:20, borderRadius:"50%", background:"white", transition:"left 0.2s", display:"block" }}/>
+          </button>
+        </div>
             <Input label="Observações" value={form.observacoes||""} onChange={e => set("observacoes", e.target.value)} />
             <div style={{ display:"flex", justifyContent:"flex-end", gap:10, marginTop:8 }}>
               <Btn variant="secondary" onClick={() => setModal(null)}>Cancelar</Btn>
