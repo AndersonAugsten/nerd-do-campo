@@ -1624,6 +1624,7 @@ const MENU = [
   { id:"posicoes",    label:"Posições",    icon:"🎯", grupo:"Cadastros" },
   { id:"temporadas",  label:"Temporadas",  icon:"📆", grupo:"Configurações" },
   { id:"time",        label:"Meu Time",    icon:"⚙️", grupo:"Configurações" },
+  { id:"mensalidades",label:"Mensalidades", icon:"💰", grupo:"Financeiro" },
 ];
 
 
@@ -1836,6 +1837,422 @@ function PaginaInicio({ dados, onNavegar }) {
   );
 }
 
+
+// ══════════════════════════════════════════════════════════════
+// CONTROLE DE MENSALIDADES
+// ══════════════════════════════════════════════════════════════
+
+const MESES_LABEL = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+  'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+const STATUS_CFG = {
+  pago:      { label:"Pago",       cor: C.win,  icon:"✅" },
+  parcial:   { label:"Parcial",    cor: C.gold, icon:"⚠️" },
+  nao_pago:  { label:"Não Pago",   cor: C.loss, icon:"❌" },
+  isento:    { label:"Isento",     cor: C.dim,  icon:"🔵" },
+};
+
+function fmtMoeda(v) {
+  return v != null ? `R$ ${Number(v).toFixed(2).replace(".",",")}` : "—";
+}
+
+function CrudMensalidades({ show }) {
+  const hoje = new Date();
+  const [mesSel, setMesSel]   = useState(hoje.getMonth() + 1);
+  const [anoSel, setAnoSel]   = useState(hoje.getFullYear());
+  const [filtroStatus, setFiltroStatus] = useState("todos");
+  const [modalJog, setModalJog] = useState(null);
+  const [formPag, setFormPag]   = useState({});
+  const [saving, setSaving]     = useState(false);
+  const [abaRel, setAbaRel]     = useState("mensal"); // mensal | inadimplentes
+
+  const { data: times }     = useQuery(() => api.get(`time?select=id_time,nome,valor_mensalidade&limit=1`));
+  const time = times?.[0];
+
+  const { data: jogadores } = useQuery(
+    () => api.get(`jogador?id_time=eq.${time?.id_time}&id_jogador=gt.0&select=id_jogador,nome,apelido,camisa,foto_url&data_fim=is.null&order=nome.asc`),
+    [time?.id_time]
+  );
+
+  const { data: pagamentos, reload: reloadPag } = useQuery(
+    () => api.get(`mensalidade?id_time=eq.${time?.id_time}&mes=eq.${mesSel}&ano=eq.${anoSel}&select=*`),
+    [time?.id_time, mesSel, anoSel]
+  );
+
+  // Relatório — inadimplentes (2+ meses em aberto)
+  const { data: todasMens } = useQuery(
+    () => api.get(`mensalidade?id_time=eq.${time?.id_time}&select=*&order=ano.desc,mes.desc`),
+    [time?.id_time]
+  );
+
+  // Cruzar jogadores com pagamentos do mês
+  const jogadoresComStatus = (jogadores||[]).map(j => {
+    const pag = (pagamentos||[]).find(p => p.id_jogador === j.id_jogador);
+    return { ...j, pag: pag || null, status: pag?.status || "nao_pago" };
+  });
+
+  const filtrados = filtroStatus === "todos"
+    ? jogadoresComStatus
+    : jogadoresComStatus.filter(j => j.status === filtroStatus);
+
+  // Totais do mês
+  const totalEsperado = jogadoresComStatus
+    .filter(j => j.status !== "isento")
+    .reduce((s, j) => s + (j.pag?.valor_esperado || time?.valor_mensalidade || 0), 0);
+  const totalRecebido = jogadoresComStatus
+    .reduce((s, j) => s + (j.pag?.valor_pago || 0), 0);
+  const totalPendente = totalEsperado - totalRecebido;
+
+  // Inadimplentes — 2+ meses em aberto
+  const inadimplentes = (jogadores||[]).filter(j => {
+    const debitos = (todasMens||[]).filter(m =>
+      m.id_jogador === j.id_jogador &&
+      (m.status === "nao_pago" || m.status === "parcial")
+    );
+    return debitos.length >= 2;
+  }).map(j => {
+    const debitos = (todasMens||[]).filter(m =>
+      m.id_jogador === j.id_jogador &&
+      (m.status === "nao_pago" || m.status === "parcial")
+    );
+    const totalDev = debitos.reduce((s,m) =>
+      s + ((m.valor_esperado||0) - (m.valor_pago||0)), 0);
+    return { ...j, debitos, totalDev };
+  });
+
+  function abrirModal(jog) {
+    const valorPadrao = time?.valor_mensalidade || 0;
+    setFormPag({
+      id_jogador:     jog.id_jogador,
+      id_time:        time?.id_time,
+      mes:            mesSel,
+      ano:            anoSel,
+      status:         jog.pag?.status || "pago",
+      valor_esperado: jog.pag?.valor_esperado ?? valorPadrao,
+      valor_pago:     jog.pag?.valor_pago ?? valorPadrao,
+      data_pagamento: jog.pag?.data_pagamento || new Date().toISOString().split("T")[0],
+      observacoes:    jog.pag?.observacoes || "",
+      _jog: jog,
+    });
+    setModalJog(jog);
+  }
+
+  function setFP(k, v) { setFormPag(f => ({ ...f, [k]: v })); }
+
+  async function salvarPagamento() {
+    setSaving(true);
+    try {
+      const body = {
+        id_jogador:    formPag.id_jogador,
+        id_time:       formPag.id_time,
+        mes:           formPag.mes,
+        ano:           formPag.ano,
+        status:        formPag.status,
+        valor_esperado: Number(formPag.valor_esperado) || 0,
+        valor_pago:    Number(formPag.valor_pago) || 0,
+        data_pagamento: formPag.data_pagamento || null,
+        observacoes:   formPag.observacoes || null,
+        atualizado_em: new Date().toISOString(),
+      };
+
+      const existe = modalJog.pag?.id_mensalidade;
+      if (existe) {
+        await api.patch(`mensalidade?id_mensalidade=eq.${existe}`, body);
+      } else {
+        await api.post(`mensalidade`, body);
+      }
+      show("Pagamento salvo!"); setModalJog(null); reloadPag();
+    } catch(e) { show("Erro: " + e.message, "error"); }
+    finally { setSaving(false); }
+  }
+
+  async function marcarPago(jog) {
+    const valorPadrao = time?.valor_mensalidade || 0;
+    const body = {
+      id_jogador: jog.id_jogador, id_time: time?.id_time,
+      mes: mesSel, ano: anoSel, status: "pago",
+      valor_esperado: valorPadrao, valor_pago: valorPadrao,
+      data_pagamento: new Date().toISOString().split("T")[0],
+      atualizado_em: new Date().toISOString(),
+    };
+    try {
+      if (jog.pag?.id_mensalidade) {
+        await api.patch(`mensalidade?id_mensalidade=eq.${jog.pag.id_mensalidade}`, body);
+      } else {
+        await api.post(`mensalidade`, body);
+      }
+      show(`${jog.apelido||jog.nome}: Pago ✅`); reloadPag();
+    } catch(e) { show("Erro: " + e.message, "error"); }
+  }
+
+  if (!time) return <Spinner/>;
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+
+      {/* Abas */}
+      <div style={{ display:"flex", gap:8 }}>
+        {[{ id:"mensal", label:"📋 Controle Mensal" }, { id:"inadimplentes", label:"🚨 Inadimplentes" }, { id:"relatorio", label:"📊 Relatório" }].map(a => (
+          <button key={a.id} onClick={() => setAbaRel(a.id)}
+            style={{ background: abaRel===a.id ? C.gold : C.surface, color: abaRel===a.id ? "#0B3D2E" : C.dim,
+              border:`1px solid ${abaRel===a.id ? C.gold : C.border}`, borderRadius:8, padding:"8px 18px",
+              fontFamily:"inherit", fontWeight:700, fontSize:12, cursor:"pointer", textTransform:"uppercase" }}>
+            {a.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── ABA MENSAL ── */}
+      {abaRel === "mensal" && (<>
+        {/* Seletor mês/ano + cards resumo */}
+        <Card style={{ padding:"16px 20px" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:16, flexWrap:"wrap", justifyContent:"space-between" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+              <button onClick={() => { let m=mesSel-1, a=anoSel; if(m<1){m=12;a--;} setMesSel(m); setAnoSel(a); }}
+                style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:6, color:C.dim, cursor:"pointer", padding:"4px 12px", fontFamily:"inherit", fontSize:16 }}>‹</button>
+              <div style={{ textAlign:"center", minWidth:160 }}>
+                <div style={{ fontSize:18, fontWeight:800, color:C.cream }}>{MESES_LABEL[mesSel-1]} {anoSel}</div>
+                <div style={{ fontSize:11, color:C.dim }}>Mensalidade padrão: {fmtMoeda(time?.valor_mensalidade)}</div>
+              </div>
+              <button onClick={() => { let m=mesSel+1, a=anoSel; if(m>12){m=1;a++;} setMesSel(m); setAnoSel(a); }}
+                style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:6, color:C.dim, cursor:"pointer", padding:"4px 12px", fontFamily:"inherit", fontSize:16 }}>›</button>
+            </div>
+            <div style={{ display:"flex", gap:12 }}>
+              {[
+                { label:"Esperado", valor: fmtMoeda(totalEsperado), cor: C.cream },
+                { label:"Recebido", valor: fmtMoeda(totalRecebido), cor: C.win },
+                { label:"Pendente", valor: fmtMoeda(totalPendente), cor: totalPendente>0 ? C.loss : C.win },
+              ].map(s => (
+                <div key={s.label} style={{ textAlign:"center", background:C.surf2, borderRadius:8, padding:"10px 16px" }}>
+                  <div style={{ fontSize:16, fontWeight:800, color:s.cor }}>{s.valor}</div>
+                  <div style={{ fontSize:10, color:C.dim, textTransform:"uppercase" }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Card>
+
+        {/* Filtros de status */}
+        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+          {[["todos","Todos",C.cream], ...Object.entries(STATUS_CFG).map(([k,v])=>[k,v.label,v.cor])].map(([k,l,c]) => (
+            <button key={k} onClick={() => setFiltroStatus(k)}
+              style={{ background: filtroStatus===k ? c+"33" : C.surface, color: filtroStatus===k ? c : C.dim,
+                border:`1px solid ${filtroStatus===k ? c : C.border}`, borderRadius:8, padding:"5px 14px",
+                fontFamily:"inherit", fontWeight:700, fontSize:11, cursor:"pointer", textTransform:"uppercase" }}>
+              {l} {k !== "todos" && `(${jogadoresComStatus.filter(j=>j.status===k).length})`}
+            </button>
+          ))}
+        </div>
+
+        {/* Tabela de jogadores */}
+        <Card style={{ padding:0, overflow:"hidden" }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+            <thead><tr style={{ background:C.surf2 }}>
+              {["#","Jogador","Status","Esperado","Pago","Saldo","Ações"].map(h => (
+                <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontSize:11, color:C.dim, textTransform:"uppercase", fontWeight:700 }}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {filtrados.map((j, i) => {
+                const cfg = STATUS_CFG[j.status] || STATUS_CFG.nao_pago;
+                const esperado = j.pag?.valor_esperado ?? (time?.valor_mensalidade||0);
+                const pago     = j.pag?.valor_pago || 0;
+                const saldo    = esperado - pago;
+                return (
+                  <tr key={j.id_jogador} style={{ background:i%2===0?C.surface:C.bg, transition:"background 0.1s" }}>
+                    <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{j.camisa||"—"}</td>
+                    <td style={{ padding:"11px 14px", fontWeight:700 }}>
+                      {j.apelido ? <>{j.apelido} <span style={{ color:C.dim, fontWeight:400, fontSize:11 }}>({j.nome})</span></> : j.nome}
+                    </td>
+                    <td style={{ padding:"11px 14px" }}>
+                      <span style={{ background:cfg.cor+"22", color:cfg.cor, border:`1px solid ${cfg.cor}44`, borderRadius:6, padding:"2px 10px", fontSize:11, fontWeight:700 }}>
+                        {cfg.icon} {cfg.label}
+                      </span>
+                    </td>
+                    <td style={{ padding:"11px 14px", color:C.dim }}>{j.status==="isento" ? "—" : fmtMoeda(esperado)}</td>
+                    <td style={{ padding:"11px 14px", color:C.win, fontWeight:700 }}>{pago>0 ? fmtMoeda(pago) : "—"}</td>
+                    <td style={{ padding:"11px 14px", color: saldo>0 ? C.loss : C.win, fontWeight:700 }}>
+                      {j.status==="isento" ? "—" : saldo>0 ? `-${fmtMoeda(saldo)}` : "✓"}
+                    </td>
+                    <td style={{ padding:"11px 14px", display:"flex", gap:6 }}>
+                      {j.status !== "pago" && j.status !== "isento" && (
+                        <Btn style={{ fontSize:11, padding:"4px 10px", background:C.win, color:"white" }}
+                          onClick={() => marcarPago(j)}>✅ Pago</Btn>
+                      )}
+                      <Btn variant="secondary" style={{ fontSize:11, padding:"4px 10px" }}
+                        onClick={() => abrirModal(j)}>Detalhes</Btn>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </Card>
+      </>)}
+
+      {/* ── ABA INADIMPLENTES ── */}
+      {abaRel === "inadimplentes" && (
+        <Card style={{ padding:0, overflow:"hidden" }}>
+          <div style={{ padding:"16px 20px", borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+            <div style={{ fontSize:15, fontWeight:700, color:C.cream }}>🚨 Inadimplentes — 2 ou mais meses em aberto</div>
+            <span style={{ background:C.loss+"22", color:C.loss, border:`1px solid ${C.loss}44`, borderRadius:8, padding:"4px 14px", fontSize:13, fontWeight:800 }}>
+              {inadimplentes.length} jogador(es)
+            </span>
+          </div>
+          {inadimplentes.length === 0 ? (
+            <div style={{ padding:32, textAlign:"center", color:C.win, fontSize:15, fontWeight:700 }}>
+              🎉 Nenhum inadimplente! Todos em dia.
+            </div>
+          ) : (
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+              <thead><tr style={{ background:C.surf2 }}>
+                {["Jogador","Meses em Aberto","Débito Total","Detalhes"].map(h => (
+                  <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontSize:11, color:C.dim, textTransform:"uppercase", fontWeight:700 }}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {inadimplentes.map((j,i) => (
+                  <tr key={j.id_jogador} style={{ background:i%2===0?C.surface:C.bg }}>
+                    <td style={{ padding:"12px 14px", fontWeight:700, color:C.cream }}>
+                      {j.apelido||j.nome}
+                    </td>
+                    <td style={{ padding:"12px 14px" }}>
+                      <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                        {j.debitos.map(d => (
+                          <span key={d.id_mensalidade} style={{ background:C.loss+"22", color:C.loss, border:`1px solid ${C.loss}44`, borderRadius:6, padding:"2px 8px", fontSize:11, fontWeight:700 }}>
+                            {MESES_LABEL[d.mes-1].slice(0,3)}/{d.ano}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td style={{ padding:"12px 14px", color:C.loss, fontWeight:800, fontSize:15 }}>
+                      {fmtMoeda(j.totalDev)}
+                    </td>
+                    <td style={{ padding:"12px 14px" }}>
+                      <span style={{ fontSize:11, color:C.dim }}>{j.debitos.length} mês(es)</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
+      )}
+
+      {/* ── ABA RELATÓRIO ── */}
+      {abaRel === "relatorio" && (
+        <Card style={{ padding:20 }}>
+          <div style={{ fontSize:15, fontWeight:700, color:C.cream, marginBottom:16 }}>📊 Relatório por Mês — {anoSel}</div>
+          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16 }}>
+            <button onClick={() => setAnoSel(a=>a-1)}
+              style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:6, color:C.dim, cursor:"pointer", padding:"4px 12px", fontFamily:"inherit", fontSize:16 }}>‹</button>
+            <div style={{ fontSize:16, fontWeight:800, color:C.cream, minWidth:80, textAlign:"center" }}>{anoSel}</div>
+            <button onClick={() => setAnoSel(a=>a+1)}
+              style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:6, color:C.dim, cursor:"pointer", padding:"4px 12px", fontFamily:"inherit", fontSize:16 }}>›</button>
+          </div>
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+            <thead><tr style={{ background:C.surf2 }}>
+              {["Mês","Pagos","Parciais","Não Pagos","Isentos","Arrecadado","Pendente"].map(h => (
+                <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontSize:11, color:C.dim, textTransform:"uppercase", fontWeight:700 }}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {MESES_LABEL.map((mes, idx) => {
+                const m = idx + 1;
+                const mens = (todasMens||[]).filter(p => p.mes===m && p.ano===anoSel);
+                const pagos    = mens.filter(p=>p.status==="pago").length;
+                const parciais = mens.filter(p=>p.status==="parcial").length;
+                const nao_pagos= mens.filter(p=>p.status==="nao_pago").length;
+                const isentos  = mens.filter(p=>p.status==="isento").length;
+                const arrec    = mens.reduce((s,p)=>s+(p.valor_pago||0), 0);
+                const pend     = mens.reduce((s,p)=>s+((p.valor_esperado||0)-(p.valor_pago||0)), 0);
+                const ehAtual  = m===mesSel && anoSel===hoje.getFullYear();
+                return (
+                  <tr key={m} style={{ background: ehAtual ? C.gold+"11" : idx%2===0?C.surface:C.bg,
+                    cursor:"pointer" }} onClick={() => { setMesSel(m); setAbaRel("mensal"); }}>
+                    <td style={{ padding:"11px 14px", fontWeight: ehAtual ? 800 : 400, color: ehAtual ? C.gold : C.cream }}>
+                      {mes} {ehAtual && "← atual"}
+                    </td>
+                    <td style={{ padding:"11px 14px", color:C.win, fontWeight:700 }}>{pagos}</td>
+                    <td style={{ padding:"11px 14px", color:C.gold }}>{parciais}</td>
+                    <td style={{ padding:"11px 14px", color:C.loss }}>{nao_pagos}</td>
+                    <td style={{ padding:"11px 14px", color:C.dim }}>{isentos}</td>
+                    <td style={{ padding:"11px 14px", color:C.win, fontWeight:700 }}>{arrec>0?fmtMoeda(arrec):"—"}</td>
+                    <td style={{ padding:"11px 14px", color:pend>0?C.loss:C.dim }}>{pend>0?fmtMoeda(pend):"—"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div style={{ fontSize:11, color:C.dim, marginTop:8, fontStyle:"italic" }}>
+            Clique em um mês para abrir o controle detalhado daquele mês.
+          </div>
+        </Card>
+      )}
+
+      {/* Modal de detalhes/edição */}
+      {modalJog && (
+        <Modal title={`Mensalidade — ${modalJog.apelido||modalJog.nome} — ${MESES_LABEL[mesSel-1]} ${anoSel}`}
+          onClose={() => setModalJog(null)}>
+          <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+            {/* Status */}
+            <div>
+              <div style={{ fontSize:11, color:C.dim, textTransform:"uppercase", marginBottom:8 }}>Status</div>
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                {Object.entries(STATUS_CFG).map(([k,v]) => (
+                  <button key={k} onClick={() => {
+                    setFP("status", k);
+                    if (k === "pago") setFP("valor_pago", formPag.valor_esperado);
+                    if (k === "isento") { setFP("valor_esperado", 0); setFP("valor_pago", 0); }
+                    if (k === "nao_pago") setFP("valor_pago", 0);
+                  }}
+                    style={{ background: formPag.status===k ? v.cor+"33" : C.surface,
+                      color: formPag.status===k ? v.cor : C.dim,
+                      border:`2px solid ${formPag.status===k ? v.cor : C.border}`,
+                      borderRadius:8, padding:"8px 16px", fontFamily:"inherit", fontWeight:700,
+                      fontSize:12, cursor:"pointer", textTransform:"uppercase" }}>
+                    {v.icon} {v.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Valores */}
+            {formPag.status !== "isento" && (
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                <Input label="Valor Esperado (R$)" type="number" min="0" step="0.01"
+                  value={formPag.valor_esperado||""} onChange={e => setFP("valor_esperado", e.target.value)}/>
+                <Input label={formPag.status==="parcial" ? "Valor Pago (R$) — parcial" : "Valor Pago (R$)"}
+                  type="number" min="0" step="0.01"
+                  value={formPag.valor_pago||""} onChange={e => setFP("valor_pago", e.target.value)}/>
+              </div>
+            )}
+            {formPag.status !== "isento" && formPag.status !== "nao_pago" && (
+              <Input label="Data do Pagamento" type="date"
+                value={formPag.data_pagamento||""} onChange={e => setFP("data_pagamento", e.target.value)}/>
+            )}
+            <Input label="Observações" value={formPag.observacoes||""}
+              onChange={e => setFP("observacoes", e.target.value)}/>
+            {/* Saldo */}
+            {formPag.status !== "isento" && (
+              <div style={{ background: C.surf2, borderRadius:8, padding:"12px 16px", display:"flex", justifyContent:"space-between" }}>
+                <span style={{ color:C.dim }}>Saldo devedor:</span>
+                <span style={{ fontWeight:800, fontSize:15, color:
+                  (formPag.valor_esperado||0)-(formPag.valor_pago||0) > 0 ? C.loss : C.win }}>
+                  {fmtMoeda((formPag.valor_esperado||0)-(formPag.valor_pago||0))}
+                </span>
+              </div>
+            )}
+            <div style={{ display:"flex", justifyContent:"flex-end", gap:8, marginTop:4 }}>
+              <Btn variant="secondary" onClick={() => setModalJog(null)}>Cancelar</Btn>
+              <Btn onClick={salvarPagamento} disabled={saving}>{saving?"Salvando...":"Salvar"}</Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 export default function AdminAppCompleto() {
   const [session, setSession]       = useState(SESSION_TOKEN ? {access_token: SESSION_TOKEN} : null);
   const [idTime, setIdTime]         = useState(null);
@@ -2005,6 +2422,7 @@ export default function AdminAppCompleto() {
           {menu === "cidades"     && (<>{secTitle("Cidades")}<CrudCidades show={show} /></>)}
           {menu === "posicoes"    && (<>{secTitle("Posições")}<CrudPosicoes show={show} /></>)}
           {menu === "temporadas"  && (<>{secTitle("Temporadas")}<CrudTemporadas show={show} /></>)}
+          {menu === "mensalidades" && (<CrudMensalidades show={show}/>)}
           {menu === "time"        && (<>{secTitle("Configurações do Time")}<ConfigTime show={show} /></>)}
         </main>
       </div>
