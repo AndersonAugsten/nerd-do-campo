@@ -83,7 +83,7 @@ function SeletorTimes({ onSelect }) {
   const tipoFutebolCampo = (tiposAtivos||[]).find(t => t.descricao.toLowerCase().includes("campo"))?.id_tipo_time || null;
   const [tipoFiltro, setTipoFiltro] = useState(null);
   // Inicializar com Futebol de Campo quando tipos carregarem
-  React.useEffect(() => { if (tiposAtivos?.length && tipoFiltro === null) { const fc = (tiposAtivos||[]).find(t => t.descricao.toLowerCase().includes("campo")); setTipoFiltro(fc?.id_tipo_time || "todos"); } }, [tiposAtivos]);
+  useEffect(() => { if (tiposAtivos?.length && tipoFiltro === null) { const fc = (tiposAtivos||[]).find(t => t.descricao.toLowerCase().includes("campo")); setTipoFiltro(fc?.id_tipo_time || "todos"); } }, [tiposAtivos]);
 
   // Filtrar times
   const times = useMemo(() => {
