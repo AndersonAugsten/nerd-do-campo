@@ -618,7 +618,6 @@ function Estatisticas({ time, temporada }) {
     { key:"gols_contra",      label:"GC",      align:"center", style:{color:C.loss} },
     { key:"cartoes_amarelos", label:"🟨",      align:"center" },
     { key:"cartoes_vermelhos",label:"🟥",      align:"center", style:{color:C.loss} },
-    { key:"minuto_medio_gol", label:"Min.Méd", align:"center", style:{color:C.dim,fontSize:12} },
   ];
   return (
     <Card style={{ padding:0, overflow:"hidden" }}>
