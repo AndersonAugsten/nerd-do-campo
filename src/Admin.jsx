@@ -2433,7 +2433,7 @@ export default function AdminAppCompleto() {
 
 // ── CRUD JOGADORES ────────────────────────────────────────────
 
-function TabelaJogadores({ grupo, lista, sk, asc, onSort, onEditar, onInativar }) {
+function TabelaJogadores({ grupo, lista, sk, asc, onSort, onEditar, onInativar, onReativar }) {
   if (!lista.length) return null;
   const S = k => <ThSortable colKey={k} sortKey={sk} asc={asc} onSort={onSort}/>;
   return (
@@ -2469,6 +2469,7 @@ function TabelaJogadores({ grupo, lista, sk, asc, onSort, onEditar, onInativar }
                   <div style={{ display:"flex", gap:6 }}>
                     <Btn variant="secondary" style={{ fontSize:11, padding:"5px 10px" }} onClick={() => onEditar(j)}>Editar</Btn>
                     {!j.data_fim && <Btn variant="danger" style={{ fontSize:11, padding:"5px 10px" }} onClick={() => onInativar(j)}>Inativar</Btn>}
+                    {j.data_fim && <Btn variant="secondary" style={{ fontSize:11, padding:"5px 10px", color:C.win, borderColor:C.win }} onClick={() => onReativar(j)}>Reativar</Btn>}
                   </div>
                 </td>
               </tr>
@@ -2548,6 +2549,12 @@ function CrudJogadores({ show }) {
     catch (e) { show(e.message, "error"); }
   }
 
+  async function reativar(j) {
+    if (!confirm(`Reativar ${j.apelido || j.nome}?`)) return;
+    try { await api.patch(`jogador?id_jogador=eq.${j.id_jogador}`, { data_fim: null }); show("Jogador reativado!"); reload(); }
+    catch (e) { show(e.message, "error"); }
+  }
+
   if (loading) return <Spinner />;
   const ativos   = (jogadores||[]).filter(j => !j.data_fim);
   const inativos = (jogadores||[]).filter(j =>  j.data_fim);
@@ -2603,12 +2610,12 @@ function CrudJogadores({ show }) {
       {ativos.length > 0 && (
         <TabelaJogadores grupo="Ativos" lista={sortData(ativos, _sk, _asc)} sk={_sk} asc={_asc}
           onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}
-          onEditar={abrirEditar} onInativar={inativar}/>
+          onEditar={abrirEditar} onInativar={inativar} onReativar={reativar}/>
       )}
       {inativos.length > 0 && (
         <TabelaJogadores grupo="Inativos" lista={sortData(inativos, _sk, _asc)} sk={_sk} asc={_asc}
           onSort={k=>{if(_sk===k)_setAsc(a=>!a);else{_setSk(k);_setAsc(true);}}}
-          onEditar={abrirEditar} onInativar={inativar}/>
+          onEditar={abrirEditar} onInativar={inativar} onReativar={reativar}/>
       )}
       {modal && (
         <Modal title={modal === "novo" ? "Novo Jogador" : "Editar Jogador"} onClose={() => setModal(null)}>
