@@ -1625,6 +1625,7 @@ const MENU_BASE = [
   { id:"temporadas",  label:"Temporadas",  icon:"📆", grupo:"Configurações" },
   { id:"time",        label:"Meu Time",    icon:"⚙️", grupo:"Configurações" },
   { id:"mensalidades",label:"Mensalidades", icon:"💰", grupo:"Financeiro" },
+  { id:"ajuda",       label:"Ajuda",        icon:"❓", grupo:"" },
 ];
 
 
@@ -2258,6 +2259,63 @@ function CrudMensalidades({ show, readOnly }) {
   );
 }
 
+
+// ══════════════════════════════════════════════════════════════
+// PÁGINA DE AJUDA
+// ══════════════════════════════════════════════════════════════
+function PaginaAjuda() {
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:24, maxWidth:640 }}>
+      <Card style={{ padding:32, textAlign:"center" }}>
+        <div style={{ fontSize:48, marginBottom:16 }}>📖</div>
+        <div style={{ fontSize:22, fontWeight:800, color:C.cream, marginBottom:8, textTransform:"uppercase", letterSpacing:"0.06em" }}>
+          Manual do Usuário
+        </div>
+        <div style={{ fontSize:13, color:C.dim, marginBottom:24, lineHeight:1.7 }}>
+          O manual contém o guia completo do sistema — desde o cadastro inicial
+          até o controle de mensalidades. Atualizado para a versão atual.
+        </div>
+        <a href="/manual.pdf" target="_blank" rel="noopener noreferrer"
+          style={{ display:"inline-flex", alignItems:"center", gap:10,
+            background:C.gold, color:"#0B3D2E", borderRadius:10,
+            padding:"14px 28px", fontFamily:"inherit", fontWeight:800,
+            fontSize:14, textDecoration:"none", textTransform:"uppercase",
+            letterSpacing:"0.06em", cursor:"pointer" }}>
+          📥 Baixar Manual (PDF)
+        </a>
+      </Card>
+
+      <Card style={{ padding:24 }}>
+        <div style={{ fontSize:13, fontWeight:800, color:C.gold, textTransform:"uppercase",
+          letterSpacing:"0.08em", marginBottom:16, borderLeft:`3px solid ${C.gold}`, paddingLeft:10 }}>
+          Dúvidas frequentes
+        </div>
+        {[
+          ["Como inativar um jogador?", "Vá em Jogadores → clique em Inativar ao lado do jogador. Ele vai para a lista de inativos mas o histórico é mantido. Para reativar, clique em Reativar."],
+          ["Como tornar a temporada pública?", "Vá em Temporadas → edite a temporada → ative o toggle 🌐 Temporada Pública."],
+          ["Como registrar um gol?", "Vá em Partidas → clique na partida → role até Gols → clique em + Gol."],
+          ["Como controlar mensalidades?", "Vá em Financeiro → Mensalidades → selecione o mês → clique em ✅ Pago para cada jogador."],
+          ["Esqueci a senha. O que faço?", "Entre em contato com o administrador do sistema para redefinir sua senha."],
+        ].map(([p, r], i) => (
+          <div key={i} style={{ borderBottom:`1px solid ${C.border}`, paddingBottom:12, marginBottom:12 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:C.cream, marginBottom:4 }}>❓ {p}</div>
+            <div style={{ fontSize:12, color:C.dim, lineHeight:1.6 }}>{r}</div>
+          </div>
+        ))}
+      </Card>
+
+      <Card style={{ padding:20, textAlign:"center" }}>
+        <div style={{ fontSize:12, color:C.dim }}>
+          Ainda com dúvidas? Entre em contato:
+        </div>
+        <div style={{ fontSize:13, color:C.gold, fontWeight:700, marginTop:6 }}>
+          contato@nerddocampo.com.br
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 export default function AdminAppCompleto() {
   const [session, setSession]       = useState(SESSION_TOKEN ? {access_token: SESSION_TOKEN} : null);
   const [idTime, setIdTime]         = useState(null);
@@ -2470,6 +2528,7 @@ export default function AdminAppCompleto() {
           {menu === "posicoes"    && (<>{secTitle("Posições")}<CrudPosicoes show={show} readOnly={!canEdit("posicoes")} /></>)}
           {menu === "temporadas"  && (<>{secTitle("Temporadas")}<CrudTemporadas show={show} readOnly={!canEdit("temporadas")} /></>)}
           {menu === "mensalidades" && (<CrudMensalidades show={show} readOnly={!canEdit("mensalidades")}/>)}
+          {menu === "ajuda"         && (<PaginaAjuda/>)}
           {menu === "time"        && (<>{secTitle("Configurações do Time")}<ConfigTime show={show} readOnly={!canEdit("time")} /></>)}
         </main>
       </div>
