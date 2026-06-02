@@ -1613,7 +1613,7 @@ function FormGol({ partida, participacoes, jogadores, onSalvo, show }) {
 }
 
 // ── APP ADMIN ─────────────────────────────────────────────────
-const MENU = [
+const MENU_BASE = [
   { id:"inicio",      label:"Início",      icon:"🏠", grupo:"" },
   { id:"app",         label:"Visão App",   icon:"👁️", grupo:"" },
   { id:"partidas",    label:"Partidas",    icon:"📅", grupo:"Jogos" },
@@ -2283,6 +2283,26 @@ export default function AdminAppCompleto() {
 
   const { data: times }      = useQuery(() => 
     idTime ? api.get(`time?id_time=eq.${idTime}&select=*&limit=1`) : api.get(`time?select=*&limit=1`),
+
+  const { data: permissoesRaw } = useQuery(() =>
+    session && idTime
+      ? api.get(`usuario_permissao?user_id=eq.${session.user?.id}&id_time=eq.${idTime}&select=*`)
+      : Promise.resolve([]),
+    [session, idTime]
+  );
+
+  const perms = React.useMemo(() => {
+    const mapa = {};
+    ["inicio","app","partidas","jogadores","adversarios","campos","cidades","posicoes","temporadas","time","mensalidades"]
+      .forEach(m => {
+        const p = (permissoesRaw||[]).find(x => x.modulo === m);
+        mapa[m] = { ver: p ? p.pode_ver : true, editar: p ? p.pode_editar : true };
+      });
+    return mapa;
+  }, [permissoesRaw]);
+
+  function canVer(modulo)  { return perms[modulo]?.ver    !== false; }
+  function canEdit(modulo) { return perms[modulo]?.editar !== false; }
     [session, idTime]
   );
   const { data: temporadas } = useQuery(() => 
@@ -2304,6 +2324,7 @@ export default function AdminAppCompleto() {
   const time = times?.[0];
 
   function navMenu(id) { setMenu(id); setPartida(null); setNovaPartida(false); }
+  const MENU = MENU_BASE.filter(m => canVer(m.id));
 
   const secTitle = (label) => (
     <div style={{ fontSize:18, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:20, display:"flex", alignItems:"center", gap:10 }}>
@@ -2386,6 +2407,15 @@ export default function AdminAppCompleto() {
 
         {/* Conteúdo */}
         <main style={{ flex:1, padding:"28px 28px", minWidth:0 }}>
+          {/* Badge somente leitura */}
+          {menu !== "inicio" && menu !== "app" && !canEdit(menu) && (
+            <div style={{ background:C.gold+"22", border:`1px solid ${C.gold}44`, borderRadius:8,
+              padding:"8px 16px", marginBottom:16, display:"flex", alignItems:"center", gap:8, fontSize:12 }}>
+              <span style={{ fontSize:16 }}>👁️</span>
+              <span style={{ color:C.gold, fontWeight:700 }}>Modo somente leitura</span>
+              <span style={{ color:C.dim }}>— Você pode visualizar mas não pode editar este módulo.</span>
+            </div>
+          )}
           {menu === "inicio" && (
             <PaginaInicio
               dados={{ cidades:_cidades, campos:_campos, posicoes:_posicoes, adversarios:_adversarios, jogadores:_jogadores, temporadas, partidas:_partidas }}

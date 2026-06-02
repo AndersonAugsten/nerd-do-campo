@@ -167,9 +167,10 @@ function DashboardSuper() {
   const { data: times, loading, reload } = useQuery(() => api.get(`time?select=*,temporada(id_temporada,nome),usuario_time(user_id,role)&order=nome.asc`));
   const { data: usuarios } = useQuery(() => api.get(`usuario_time?select=*&order=criado_em.desc`));
   const { toast, show } = useToast();
-  const [modalNovoTime, setModalNovoTime]   = useState(false);
-  const [modalNovoUser, setModalNovoUser]   = useState(false);
+  const [modalNovoTime, setModalNovoTime]     = useState(false);
+  const [modalNovoUser, setModalNovoUser]     = useState(false);
   const [timeSelecionado, setTimeSelecionado] = useState(null);
+  const [modalPerms, setModalPerms]           = useState(null); // { user_id, id_time, nome }
   const [aba, setAba] = useState("times");
 
   const totalTimes    = (times||[]).length;
@@ -247,7 +248,7 @@ function DashboardSuper() {
         <div style={{ padding:"18px 24px", borderBottom:`1px solid ${C.border}` }}>
           <div style={{ fontSize:16, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:C.cream }}>Usuários e Acessos</div>
         </div>
-        <UsuariosTable times={times||[]} reload={reload} show={show}/>
+        <UsuariosTable times={times||[]} reload={reload} show={show} onPermissoes={setModalPerms}/>
       </Card>
 
       {/* Modal Novo Time */}
@@ -263,13 +264,22 @@ function DashboardSuper() {
           <FormNovoAdmin time={timeSelecionado} onSalvo={()=>{ setModalNovoUser(false); setTimeSelecionado(null); reload(); show("Admin criado! Envie o acesso para o time."); }} show={show}/>
         </Modal>
       )}
+      {/* Modal Permissões */}
+      {modalPerms && (
+        <ModalPermissoes
+          user_id={modalPerms.user_id}
+          id_time={modalPerms.id_time}
+          nomeUsuario={modalPerms.nome}
+          onClose={() => setModalPerms(null)}
+          show={show}/>
+      )}
       </>}
     </div>
   );
 }
 
 // ── TABELA DE USUÁRIOS ────────────────────────────────────────
-function UsuariosTable({ times, reload, show }) {
+function UsuariosTable({ times, reload, show, onPermissoes }) {
   const { data: vinculos, loading, reload: reloadVinculos } = useQuery(() =>
     api.get(`usuario_time?select=*,time(nome)&order=criado_em.desc`)
   );
@@ -298,7 +308,13 @@ function UsuariosTable({ times, reload, show }) {
               </span>
             </td>
             <td style={{ padding:"12px 16px", color:C.dim, fontSize:13 }}>{new Date(v.criado_em).toLocaleDateString("pt-BR")}</td>
-            <td style={{ padding:"12px 16px" }}>
+            <td style={{ padding:"12px 16px", display:"flex", gap:6 }}>
+              {v.role !== "superadmin" && (
+                <Btn variant="secondary" style={{ fontSize:11, padding:"4px 10px" }}
+                  onClick={() => onPermissoes && onPermissoes({ user_id: v.user_id, id_time: v.id_time, nome: v.user_id })}>
+                  🔐 Permissões
+                </Btn>
+              )}
               {v.role !== "superadmin" && (
                 <Btn variant="danger" style={{ fontSize:11, padding:"4px 10px" }} onClick={()=>revogar(v.id)}>Revogar</Btn>
               )}
@@ -472,6 +488,158 @@ function FormNovoAdmin({ time, onSalvo, show }) {
 }
 
 // ── APP SUPER ─────────────────────────────────────────────────
+
+
+// ══════════════════════════════════════════════════════════════
+// CONTROLE DE PERMISSÕES DE USUÁRIO
+// ══════════════════════════════════════════════════════════════
+
+const MODULOS_ADMIN = [
+  { id:"inicio",       label:"🏠 Início" },
+  { id:"app",          label:"👁️ Visão App" },
+  { id:"partidas",     label:"📅 Partidas" },
+  { id:"jogadores",    label:"👕 Jogadores" },
+  { id:"adversarios",  label:"⚔️ Adversários" },
+  { id:"campos",       label:"🏟️ Campos" },
+  { id:"cidades",      label:"📍 Cidades" },
+  { id:"posicoes",     label:"🎯 Posições" },
+  { id:"temporadas",   label:"📆 Temporadas" },
+  { id:"time",         label:"⚙️ Meu Time" },
+  { id:"mensalidades", label:"💰 Mensalidades" },
+];
+
+function ModalPermissoes({ user_id, id_time, nomeUsuario, onClose, show }) {
+  const { data: permissoes, reload } = useQuery(() =>
+    api.get(`usuario_permissao?user_id=eq.${user_id}&id_time=eq.${id_time}&select=*`)
+  );
+  const [saving, setSaving] = useState(false);
+
+  // Montar estado local com todas as permissões
+  const [perms, setPerms] = useState(null);
+
+  useEffect(() => {
+    if (permissoes !== null) {
+      const mapa = {};
+      MODULOS_ADMIN.forEach(m => {
+        const p = (permissoes||[]).find(p => p.modulo === m.id);
+        mapa[m.id] = {
+          pode_ver:    p ? p.pode_ver    : true,
+          pode_editar: p ? p.pode_editar : true,
+        };
+      });
+      setPerms(mapa);
+    }
+  }, [permissoes]);
+
+  function toggle(modulo, campo) {
+    setPerms(prev => ({
+      ...prev,
+      [modulo]: {
+        ...prev[modulo],
+        [campo]: !prev[modulo][campo],
+        // Se desmarcar ver, desmarcar editar também
+        ...(campo === 'pode_ver' && prev[modulo].pode_ver ? { pode_editar: false } : {}),
+      }
+    }));
+  }
+
+  async function salvar() {
+    setSaving(true);
+    try {
+      for (const m of MODULOS_ADMIN) {
+        const p = perms[m.id];
+        const existe = (permissoes||[]).find(x => x.modulo === m.id);
+        const body = {
+          user_id, id_time, modulo: m.id,
+          pode_ver:    p.pode_ver,
+          pode_editar: p.pode_editar,
+        };
+        if (existe) {
+          await api.patch(`usuario_permissao?id=eq.${existe.id}`, body);
+        } else {
+          await api.post(`usuario_permissao`, body);
+        }
+      }
+      show("Permissões salvas!"); reload(); onClose();
+    } catch(e) { show("Erro: " + e.message, "error"); }
+    finally { setSaving(false); }
+  }
+
+  async function liberarTudo() {
+    const novo = {};
+    MODULOS_ADMIN.forEach(m => { novo[m.id] = { pode_ver: true, pode_editar: true }; });
+    setPerms(novo);
+  }
+
+  async function bloquearTudo() {
+    const novo = {};
+    MODULOS_ADMIN.forEach(m => { novo[m.id] = { pode_ver: false, pode_editar: false }; });
+    setPerms(novo);
+  }
+
+  if (!perms) return <Spinner/>;
+
+  return (
+    <Modal title={`Permissões — ${nomeUsuario}`} onClose={onClose}>
+      <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+        {/* Ações rápidas */}
+        <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+          <Btn variant="secondary" style={{ fontSize:11, padding:"5px 12px" }} onClick={liberarTudo}>✅ Liberar tudo</Btn>
+          <Btn variant="secondary" style={{ fontSize:11, padding:"5px 12px", color:C.loss }} onClick={bloquearTudo}>🔒 Bloquear tudo</Btn>
+        </div>
+
+        {/* Tabela de permissões */}
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+          <thead>
+            <tr style={{ background:C.surf2 }}>
+              <th style={{ padding:"10px 14px", textAlign:"left", fontSize:11, color:C.dim, textTransform:"uppercase", fontWeight:700 }}>Módulo</th>
+              <th style={{ padding:"10px 14px", textAlign:"center", fontSize:11, color:C.dim, textTransform:"uppercase", fontWeight:700, width:90 }}>Ver</th>
+              <th style={{ padding:"10px 14px", textAlign:"center", fontSize:11, color:C.dim, textTransform:"uppercase", fontWeight:700, width:90 }}>Editar</th>
+            </tr>
+          </thead>
+          <tbody>
+            {MODULOS_ADMIN.map((m, i) => {
+              const p = perms[m.id];
+              return (
+                <tr key={m.id} style={{ background: i%2===0 ? C.surface : C.bg }}>
+                  <td style={{ padding:"11px 14px", fontWeight:600, color:C.cream }}>{m.label}</td>
+                  <td style={{ padding:"11px 14px", textAlign:"center" }}>
+                    <button onClick={() => toggle(m.id, 'pode_ver')}
+                      style={{ width:36, height:20, borderRadius:10, border:"none", cursor:"pointer",
+                        background: p.pode_ver ? C.win : C.dim, position:"relative", transition:"background 0.2s" }}>
+                      <span style={{ position:"absolute", top:2, left: p.pode_ver ? 18 : 2,
+                        width:16, height:16, borderRadius:"50%", background:"white", transition:"left 0.2s", display:"block" }}/>
+                    </button>
+                  </td>
+                  <td style={{ padding:"11px 14px", textAlign:"center" }}>
+                    <button onClick={() => p.pode_ver && toggle(m.id, 'pode_editar')}
+                      style={{ width:36, height:20, borderRadius:10, border:"none",
+                        cursor: p.pode_ver ? "pointer" : "not-allowed",
+                        background: p.pode_editar && p.pode_ver ? C.gold : C.dim,
+                        position:"relative", transition:"background 0.2s",
+                        opacity: p.pode_ver ? 1 : 0.4 }}>
+                      <span style={{ position:"absolute", top:2, left: p.pode_editar && p.pode_ver ? 18 : 2,
+                        width:16, height:16, borderRadius:"50%", background:"white", transition:"left 0.2s", display:"block" }}/>
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        <div style={{ fontSize:11, color:C.dim, fontStyle:"italic" }}>
+          ℹ️ Desativar "Ver" remove o módulo do menu. "Editar" desativado mantém visível mas sem botões de salvar/editar.
+        </div>
+
+        <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
+          <Btn variant="secondary" onClick={onClose}>Cancelar</Btn>
+          <Btn onClick={salvar} disabled={saving}>{saving ? "Salvando..." : "Salvar Permissões"}</Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+}
 
 // ══════════════════════════════════════════════════════════════
 // CRUD TIPOS DE TIME
