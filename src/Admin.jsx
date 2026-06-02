@@ -2305,8 +2305,7 @@ export default function AdminAppCompleto() {
 
   function canVer(modulo)  { return perms[modulo]?.ver    !== false; }
   function canEdit(modulo) { return perms[modulo]?.editar !== false; }
-    [session, idTime]
-  );
+
   const { data: temporadas } = useQuery(() => 
     idTime ? api.get(`temporada?id_time=eq.${idTime}&select=*&order=data_inicio.desc`) : api.get(`temporada?select=*&order=data_inicio.desc`),
     [session, idTime]
