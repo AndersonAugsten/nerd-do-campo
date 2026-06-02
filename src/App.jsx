@@ -77,6 +77,7 @@ function fmtHora(ts) { return ts ? new Date(ts).toLocaleTimeString("pt-BR", { ho
 // ── SELETOR DE TIMES ──────────────────────────────────────────
 function SeletorTimes({ onSelect }) {
   const [dataRef, setDataRef] = useState(""); // vazio = sem filtro de data
+  const [modalCadastro, setModalCadastro] = useState(false);
 
   const { data: allTimes, loading } = useQuery(() => sb(`time?select=*,temporada(id_temporada,nome,data_inicio,data_fim,publico),tipo_time(id_tipo_time,descricao),cidade:id_cidade_sede(nome,estado),campo:id_campo(nome)&publico=eq.true&order=nome.asc`));
   const { data: tiposAtivos } = useQuery(() => sb(`tipo_time?select=*&status=eq.Ativo&order=descricao.asc`));
@@ -227,9 +228,22 @@ function SeletorTimes({ onSelect }) {
         </div>
       </main>
 
-      <footer style={{ textAlign:"center", padding:"20px", color:C.dim, fontSize:12, borderTop:`1px solid ${C.border}`, marginTop:40 }}>
+      {/* CTA cadastro */}
+      <div style={{ textAlign:"center", padding:"24px 16px 8px", borderTop:`1px solid ${C.border}`, marginTop:32 }}>
+        <div style={{ fontSize:13, color:C.dim, marginBottom:12 }}>Quer ter seu time aqui?</div>
+        <button onClick={() => setModalCadastro(true)}
+          style={{ background:"none", border:`2px solid ${C.gold}`, borderRadius:10,
+            color:C.gold, fontFamily:"inherit", fontWeight:800, fontSize:13,
+            padding:"11px 28px", cursor:"pointer", textTransform:"uppercase", letterSpacing:"0.06em" }}>
+          🏆 Cadastrar meu Time
+        </button>
+      </div>
+
+      <footer style={{ textAlign:"center", padding:"20px", color:C.dim, fontSize:12, borderTop:`1px solid ${C.border}`, marginTop:20 }}>
         ⚽ Nerd do Campo — Estatísticas de Futebol Amador
       </footer>
+
+      {modalCadastro && <ModalSolicitacao onClose={() => setModalCadastro(false)}/>}
     </div>
   );
 }
