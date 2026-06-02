@@ -2264,14 +2264,6 @@ export default function AdminAppCompleto() {
   const [isSuperadmin, setIsSuperadmin] = useState(false);
   const [menu, setMenu] = useState("inicio");
 
-  // Redirecionar para o primeiro menu permitido após carregar permissões
-  useEffect(() => {
-    if (!permissoesRaw) return;
-    if (!canVer(menu)) {
-      const primeiro = MENU_BASE.find(m => canVer(m.id));
-      if (primeiro) setMenu(primeiro.id);
-    }
-  }, [permissoesRaw]);
   const [partida, setPartida]   = useState(null);
   const [novaPartida, setNovaPartida] = useState(false);
   const { toast, show }         = useToast();
@@ -2317,6 +2309,15 @@ export default function AdminAppCompleto() {
 
   function canVer(modulo)  { return perms[modulo]?.ver    !== false; }
   function canEdit(modulo) { return perms[modulo]?.editar !== false; }
+
+  // Redirecionar para o primeiro menu permitido após carregar permissões
+  useEffect(() => {
+    if (!permissoesRaw) return;
+    if (!canVer(menu)) {
+      const primeiro = MENU_BASE.find(m => canVer(m.id));
+      if (primeiro) setMenu(primeiro.id);
+    }
+  }, [permissoesRaw]);
 
   const { data: temporadas } = useQuery(() => 
     idTime ? api.get(`temporada?id_time=eq.${idTime}&select=*&order=data_inicio.desc`) : api.get(`temporada?select=*&order=data_inicio.desc`),

@@ -281,7 +281,7 @@ function DashboardSuper() {
 // ── TABELA DE USUÁRIOS ────────────────────────────────────────
 function UsuariosTable({ times, reload, show, onPermissoes }) {
   const { data: vinculos, loading, reload: reloadVinculos } = useQuery(() =>
-    api.get(`vw_usuarios_time?select=*,time(nome)&order=criado_em.desc`)
+    api.post(`rpc/listar_usuarios_time`, {})
   );
 
   async function revogar(id) {
@@ -302,7 +302,7 @@ function UsuariosTable({ times, reload, show, onPermissoes }) {
           <tr key={v.id} style={{ background:i%2===0?C.surface:C.bg }}>
             <td style={{ padding:"12px 16px", color:C.cream, fontSize:13 }}>{v.email || v.user_id?.substring(0,8)+"..."}</td>
             <td style={{ padding:"12px 16px", color:C.dim, fontSize:12 }}>{v.last_sign_in_at ? new Date(v.last_sign_in_at).toLocaleDateString("pt-BR") : "Nunca"}</td>
-            <td style={{ padding:"12px 16px", fontWeight:700, color:C.cream }}>{v.time?.nome||"—"}</td>
+            <td style={{ padding:"12px 16px", fontWeight:700, color:C.cream }}>{v.nome_time||"—"}</td>
             <td style={{ padding:"12px 16px" }}>
               <span style={{ background:v.role==="superadmin"?C.gold+"33":v.role==="admin"?C.win+"33":C.surf2, color:v.role==="superadmin"?C.gold:v.role==="admin"?C.win:C.dim, border:`1px solid ${v.role==="superadmin"?C.gold:v.role==="admin"?C.win:C.border}55`, borderRadius:6, padding:"2px 10px", fontSize:11, fontWeight:700, textTransform:"uppercase" }}>
                 {v.role}
