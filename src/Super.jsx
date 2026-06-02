@@ -406,8 +406,7 @@ function FormNovoAdmin({ time, onSalvo, show }) {
     if (!email) { show("E-mail obrigatório.", "error"); return; }
     setSaving(true);
     try {
-      // Usar função RPC segura
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/criar_admin_time`, {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/vincular_admin_time`, {
         method: "POST",
         headers: {
           apikey: SUPABASE_KEY,
