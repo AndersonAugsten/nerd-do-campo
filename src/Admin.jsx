@@ -2283,6 +2283,8 @@ export default function AdminAppCompleto() {
 
   const { data: times }      = useQuery(() => 
     idTime ? api.get(`time?id_time=eq.${idTime}&select=*&limit=1`) : api.get(`time?select=*&limit=1`),
+    [session, idTime]
+  );
 
   const { data: permissoesRaw } = useQuery(() =>
     session && idTime
