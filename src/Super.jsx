@@ -214,6 +214,7 @@ function DashboardSuper() {
           { id:"solicitacoes", label:`📋 Solicitações${(solPendentes||[]).length > 0 ? ` (${(solPendentes||[]).length})` : ""}` },
           { id:"tipos",        label:"⚽ Tipos de Time" },
           { id:"config",       label:"⚙️ Configurações" },
+          { id:"ajuda",        label:"❓ Ajuda" },
         ].map(a => {
           const temPendentes = a.id === "solicitacoes" && (solPendentes||[]).length > 0;
           const corFundo = aba===a.id ? (temPendentes ? C.loss : C.gold)
@@ -234,6 +235,7 @@ function DashboardSuper() {
 
       {aba === "tipos"        && <CrudTipoTime show={show}/>}
       {aba === "config"       && <ConfigSistema show={show}/>}
+      {aba === "ajuda"        && <AjudaSuper/>}
       {aba === "mensalidades" && <CrudMensalidadeTimes show={show}/>}
       {aba === "solicitacoes" && <CrudSolicitacoes show={show}/>}
       {aba === "times" && <>
@@ -1610,6 +1612,53 @@ function CrudMensalidadeTimes({ show }) {
           </div>
         </Modal>
       )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// PÁGINA DE AJUDA DO SUPER
+// ══════════════════════════════════════════════════════════════
+function AjudaSuper() {
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:20, maxWidth:640 }}>
+      <Card style={{ padding:32, textAlign:"center" }}>
+        <div style={{ fontSize:48, marginBottom:16 }}>📕</div>
+        <div style={{ fontSize:22, fontWeight:800, color:C.cream, marginBottom:8, textTransform:"uppercase", letterSpacing:"0.06em" }}>
+          Manual do Super Admin
+        </div>
+        <div style={{ fontSize:13, color:C.dim, marginBottom:24, lineHeight:1.7 }}>
+          Guia completo de gestão do sistema: times, mensalidades, solicitações,
+          tipos, configurações, permissões e os fluxos do dia a dia.
+        </div>
+        <a href="/manual-super.pdf" target="_blank" rel="noopener noreferrer"
+          style={{ display:"inline-flex", alignItems:"center", gap:10,
+            background:C.gold, color:"#0B3D2E", borderRadius:10,
+            padding:"14px 28px", fontFamily:"inherit", fontWeight:800,
+            fontSize:14, textDecoration:"none", textTransform:"uppercase",
+            letterSpacing:"0.06em" }}>
+          📥 Baixar Manual do Super (PDF)
+        </a>
+      </Card>
+
+      <Card style={{ padding:24 }}>
+        <div style={{ fontSize:13, fontWeight:800, color:C.gold, textTransform:"uppercase",
+          letterSpacing:"0.08em", marginBottom:16, borderLeft:`3px solid ${C.gold}`, paddingLeft:10 }}>
+          Atalhos rápidos
+        </div>
+        {[
+          ["Aprovar um time novo","Aba Solicitações (fica vermelha quando há pendentes) → Analisar → definir permissões → Aprovar."],
+          ["Registrar mensalidade","Aba Mensalidades → navegar até o mês → ✅ Pago ou Detalhes para anexar comprovante."],
+          ["Suspender um time","Aba Times → Inativar. O acesso é bloqueado na hora, dados preservados."],
+          ["Colocar em manutenção","Aba Configurações → Modo Manutenção. Você continua acessando o Super para desligar."],
+          ["Definir valores de mensalidade","Aba Configurações → Níveis de Mensalidade → ajustar cada nível."],
+        ].map(([p,r],i) => (
+          <div key={i} style={{ borderBottom:`1px solid ${C.border}`, paddingBottom:12, marginBottom:12 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:C.cream, marginBottom:4 }}>▸ {p}</div>
+            <div style={{ fontSize:12, color:C.dim, lineHeight:1.6 }}>{r}</div>
+          </div>
+        ))}
+      </Card>
     </div>
   );
 }
