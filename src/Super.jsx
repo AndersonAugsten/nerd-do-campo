@@ -211,6 +211,7 @@ function DashboardSuper() {
           { id:"times",        label:"🏆 Times" },
           { id:"solicitacoes", label:`📋 Solicitações${(solPendentes||[]).length > 0 ? ` (${(solPendentes||[]).length})` : ""}` },
           { id:"tipos",        label:"⚽ Tipos de Time" },
+          { id:"config",       label:"⚙️ Configurações" },
         ].map(a => (
           <button key={a.id} onClick={() => setAba(a.id)}
             style={{ background: aba===a.id ? C.gold : C.surface, color: aba===a.id ? "#0B3D2E" : C.dim,
@@ -222,6 +223,7 @@ function DashboardSuper() {
       </div>
 
       {aba === "tipos"        && <CrudTipoTime show={show}/>}
+      {aba === "config"       && <ConfigSistema show={show}/>}
       {aba === "solicitacoes" && <CrudSolicitacoes show={show}/>}
       {aba === "times" && <>
 
@@ -932,6 +934,86 @@ function CrudSolicitacoes({ show }) {
         </Modal>
       )}
     </div>
+  );
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// CONFIGURAÇÕES GLOBAIS DO SISTEMA
+// ══════════════════════════════════════════════════════════════
+const CONFIGS_LABEL = {
+  "cadastro_time_ativo": {
+    label: "Cadastro de Times",
+    desc:  "Exibe o botão '🏆 Cadastrar meu Time' no app público",
+    icon:  "🏆",
+  },
+};
+
+function ConfigSistema({ show }) {
+  const { data: configs, reload } = useQuery(() =>
+    api.get(`config_sistema?select=*&order=chave.asc`)
+  );
+  const [saving, setSaving] = useState(null);
+
+  async function toggle(cfg) {
+    setSaving(cfg.chave);
+    try {
+      const novoValor = cfg.valor === "true" ? "false" : "true";
+      await api.patch(`config_sistema?chave=eq.${cfg.chave}`, {
+        valor: novoValor,
+        atualizado_em: new Date().toISOString(),
+      });
+      show(`${CONFIGS_LABEL[cfg.chave]?.label || cfg.chave}: ${novoValor === "true" ? "Ativado ✅" : "Desativado 🔒"}`);
+      reload();
+    } catch(e) { show("Erro: " + e.message, "error"); }
+    finally { setSaving(null); }
+  }
+
+  return (
+    <Card style={{ padding:24, maxWidth:600 }}>
+      <div style={{ fontSize:15, fontWeight:700, color:C.cream, marginBottom:20,
+        borderLeft:`3px solid ${C.gold}`, paddingLeft:10 }}>
+        ⚙️ Configurações Globais do Sistema
+      </div>
+      {(configs||[]).length === 0 && (
+        <div style={{ color:C.dim, fontSize:13 }}>Nenhuma configuração encontrada.</div>
+      )}
+      {(configs||[]).map(cfg => {
+        const meta = CONFIGS_LABEL[cfg.chave] || { label: cfg.chave, desc: cfg.descricao, icon: "⚙️" };
+        const ativo = cfg.valor === "true";
+        return (
+          <div key={cfg.chave} style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+            padding:"16px 0", borderBottom:`1px solid ${C.border}` }}>
+            <div>
+              <div style={{ fontSize:14, fontWeight:700, color:C.cream }}>
+                {meta.icon} {meta.label}
+              </div>
+              <div style={{ fontSize:12, color:C.dim, marginTop:2 }}>{meta.desc}</div>
+              <div style={{ fontSize:10, color:C.dim, marginTop:4 }}>
+                Atualizado em: {new Date(cfg.atualizado_em).toLocaleString("pt-BR")}
+              </div>
+            </div>
+            <div style={{ display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
+              <span style={{ fontSize:11, color: ativo ? C.win : C.dim, fontWeight:700 }}>
+                {ativo ? "Ativo" : "Inativo"}
+              </span>
+              <button
+                onClick={() => toggle(cfg)}
+                disabled={saving === cfg.chave}
+                style={{ width:48, height:26, borderRadius:13, border:"none",
+                  cursor:"pointer", background: ativo ? C.win : C.dim,
+                  position:"relative", transition:"background 0.2s",
+                  opacity: saving === cfg.chave ? 0.5 : 1 }}>
+                <span style={{ position:"absolute", top:3,
+                  left: ativo ? 24 : 3,
+                  width:20, height:20, borderRadius:"50%",
+                  background:"white", transition:"left 0.2s", display:"block" }}/>
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </Card>
   );
 }
 
