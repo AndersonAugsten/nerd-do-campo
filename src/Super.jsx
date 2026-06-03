@@ -193,6 +193,7 @@ function DashboardSuper() {
   const [modalNovoUser, setModalNovoUser]     = useState(false);
   const [timeSelecionado, setTimeSelecionado] = useState(null);
   const [modalPerms, setModalPerms]           = useState(null); // { user_id, id_time, nome }
+  const [modalNivel, setModalNivel]           = useState(null); // time selecionado para editar nível
   const [aba, setAba] = useState("times");
 
   const totalTimes    = (times||[]).length;
@@ -209,6 +210,7 @@ function DashboardSuper() {
       <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
         {[
           { id:"times",        label:"🏆 Times" },
+          { id:"mensalidades", label:"💵 Mensalidades" },
           { id:"solicitacoes", label:`📋 Solicitações${(solPendentes||[]).length > 0 ? ` (${(solPendentes||[]).length})` : ""}` },
           { id:"tipos",        label:"⚽ Tipos de Time" },
           { id:"config",       label:"⚙️ Configurações" },
@@ -224,6 +226,7 @@ function DashboardSuper() {
 
       {aba === "tipos"        && <CrudTipoTime show={show}/>}
       {aba === "config"       && <ConfigSistema show={show}/>}
+      {aba === "mensalidades" && <CrudMensalidadeTimes show={show}/>}
       {aba === "solicitacoes" && <CrudSolicitacoes show={show}/>}
       {aba === "times" && <>
 
@@ -249,18 +252,39 @@ function DashboardSuper() {
         </div>
         <table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
           <thead><tr style={{ background:C.surf2 }}>
-            {["Time","Temporadas","Admins","Fundação","Ações"].map(h => <th key={h} style={{ padding:"10px 16px", textAlign:"left", fontSize:11, color:C.dim, textTransform:"uppercase", letterSpacing:"0.06em", fontWeight:700 }}>{h}</th>)}
+            {["Time","Status","Nível","Temporadas","Admins","Fundação","Ações"].map(h => <th key={h} style={{ padding:"10px 16px", textAlign:"left", fontSize:11, color:C.dim, textTransform:"uppercase", letterSpacing:"0.06em", fontWeight:700 }}>{h}</th>)}
           </tr></thead>
           <tbody>
             {(times||[]).map((t,i) => (
               <tr key={t.id_time} style={{ background:i%2===0?C.surface:C.bg }}>
                 <td style={{ padding:"13px 16px", fontWeight:700, color:C.cream }}>{t.nome}</td>
+                <td style={{ padding:"13px 16px" }}>
+                  <span style={{ color: t.status==="Inativo" ? C.loss : C.win, fontWeight:700, fontSize:12 }}>
+                    {t.status==="Inativo" ? "🔴 Inativo" : "🟢 Ativo"}
+                  </span>
+                </td>
+                <td style={{ padding:"13px 16px" }}>
+                  <span style={{ background:C.gold+"22", color:C.gold, border:`1px solid ${C.gold}44`, borderRadius:6, padding:"2px 10px", fontSize:12, fontWeight:700 }}>
+                    Nível {t.nivel_mensalidade||1}
+                  </span>
+                </td>
                 <td style={{ padding:"13px 16px", color:C.dim }}>{t.temporada?.length||0}</td>
                 <td style={{ padding:"13px 16px", color:C.dim }}>{(t.usuario_time||[]).filter(u=>u.role==="admin").length}</td>
                 <td style={{ padding:"13px 16px", color:C.dim, fontSize:13 }}>{t.data_fundacao?new Date(t.data_fundacao).getFullYear():"—"}</td>
-                <td style={{ padding:"13px 16px" }}>
+                <td style={{ padding:"13px 16px", display:"flex", gap:6, flexWrap:"wrap" }}>
                   <Btn variant="secondary" style={{ fontSize:11, padding:"5px 12px" }} onClick={()=>{ setTimeSelecionado(t); setModalNovoUser(true); }}>
                     + Admin
+                  </Btn>
+                  <Btn variant="secondary" style={{ fontSize:11, padding:"5px 12px" }} onClick={()=> setModalNivel(t)}>
+                    Nível
+                  </Btn>
+                  <Btn variant="secondary" style={{ fontSize:11, padding:"5px 12px", color: t.status==="Inativo" ? C.win : C.loss }}
+                    onClick={async ()=>{
+                      const novo = t.status==="Inativo" ? "Ativo" : "Inativo";
+                      await api.patch(`time?id_time=eq.${t.id_time}`, { status: novo });
+                      show(`${t.nome}: ${novo}`); reload();
+                    }}>
+                    {t.status==="Inativo" ? "Ativar" : "Inativar"}
                   </Btn>
                 </td>
               </tr>
@@ -297,6 +321,14 @@ function DashboardSuper() {
           id_time={modalPerms.id_time}
           nomeUsuario={modalPerms.nome}
           onClose={() => setModalPerms(null)}
+          show={show}/>
+      )}
+
+      {/* Modal Nível de Mensalidade */}
+      {modalNivel && (
+        <ModalNivelMensalidade time={modalNivel}
+          onClose={() => setModalNivel(null)}
+          onSalvo={() => { setModalNivel(null); reload(); show("Nível atualizado!"); }}
           show={show}/>
       )}
       </>}
@@ -356,7 +388,7 @@ function UsuariosTable({ times, reload, show, onPermissoes }) {
 // ── FORM NOVO TIME ────────────────────────────────────────────
 function FormNovoTime({ onSalvo, show }) {
   const { data: campos } = useQuery(() => api.get(`campo?select=*&order=nome.asc`));
-  const [form, setForm] = useState({ nome:"", data_fundacao:"", numero_titulares:"11", quantidade_periodos:"2", minutos_padrao_periodo:"45", permite_acrescimos:"N", tecnico:"", presidente:"", id_campo:"" });
+  const [form, setForm] = useState({ nome:"", data_fundacao:"", numero_titulares:"11", quantidade_periodos:"2", minutos_padrao_periodo:"45", permite_acrescimos:"N", tecnico:"", presidente:"", id_campo:"", nivel_mensalidade:"1" });
   const [saving, setSaving] = useState(false);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
 
@@ -374,6 +406,7 @@ function FormNovoTime({ onSalvo, show }) {
         tecnico: form.tecnico||null,
         presidente: form.presidente||null,
         id_campo: form.id_campo?Number(form.id_campo):null,
+        nivel_mensalidade: Number(form.nivel_mensalidade)||1,
       });
       // Criar temporada inicial automaticamente
       const ano = new Date().getFullYear();
@@ -409,6 +442,9 @@ function FormNovoTime({ onSalvo, show }) {
         <Input label="Técnico" value={form.tecnico} onChange={e=>set("tecnico",e.target.value)}/>
         <Input label="Presidente" value={form.presidente} onChange={e=>set("presidente",e.target.value)}/>
       </div>
+      <Select label="Nível de Mensalidade do Sistema" value={form.nivel_mensalidade} onChange={e=>set("nivel_mensalidade",e.target.value)}>
+        {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>Nível {n}</option>)}
+      </Select>
       <div style={{ background:C.surf2, borderRadius:8, padding:"12px 16px", fontSize:13, color:C.dim }}>
         ℹ️ Uma <strong style={{color:C.cream}}>Temporada {new Date().getFullYear()}</strong> será criada automaticamente para este time.
       </div>
@@ -947,6 +983,11 @@ const CONFIGS_LABEL = {
     desc:  "Exibe o botão '🏆 Cadastrar meu Time' no app público",
     icon:  "🏆",
   },
+  "sistema_manutencao": {
+    label: "Modo Manutenção",
+    desc:  "Bloqueia TODO o acesso (público e admin) exibindo tela de manutenção",
+    icon:  "🔧",
+  },
 };
 
 function ConfigSistema({ show }) {
@@ -954,14 +995,27 @@ function ConfigSistema({ show }) {
     api.get(`config_sistema?select=*&order=chave.asc`)
   );
   const [saving, setSaving] = useState(null);
+  const [niveis, setNiveis] = useState({});
+
+  // Sincronizar valores de níveis para edição local
+  useEffect(() => {
+    if (configs) {
+      const n = {};
+      configs.filter(c => c.chave.startsWith("mensalidade_nivel_")).forEach(c => {
+        n[c.chave] = c.valor;
+      });
+      setNiveis(n);
+    }
+  }, [configs]);
 
   async function toggle(cfg) {
     setSaving(cfg.chave);
     try {
-      const novoValor = cfg.valor === "true" ? "false" : "true";
+      const atual = String(cfg.valor ?? "").trim().toLowerCase();
+      const estaAtivo = atual === "true" || atual === "1";
+      const novoValor = estaAtivo ? "false" : "true";
       await api.patch(`config_sistema?chave=eq.${cfg.chave}`, {
-        valor: novoValor,
-        atualizado_em: new Date().toISOString(),
+        valor: novoValor, atualizado_em: new Date().toISOString(),
       });
       show(`${CONFIGS_LABEL[cfg.chave]?.label || cfg.chave}: ${novoValor === "true" ? "Ativado ✅" : "Desativado 🔒"}`);
       reload();
@@ -969,51 +1023,464 @@ function ConfigSistema({ show }) {
     finally { setSaving(null); }
   }
 
+  async function salvarNivel(chave) {
+    setSaving(chave);
+    try {
+      await api.patch(`config_sistema?chave=eq.${chave}`, {
+        valor: String(niveis[chave] || "0"), atualizado_em: new Date().toISOString(),
+      });
+      show("Valor salvo!"); reload();
+    } catch(e) { show("Erro: " + e.message, "error"); }
+    finally { setSaving(null); }
+  }
+
+  const ehBooleano = (v) => {
+    const s = String(v ?? "").trim().toLowerCase();
+    return s === "true" || s === "false" || s === "1" || s === "0";
+  };
+  const ehAtivo = (v) => {
+    const s = String(v ?? "").trim().toLowerCase();
+    return s === "true" || s === "1";
+  };
+  const toggles = (configs||[]).filter(c => !c.chave.startsWith("mensalidade_nivel_") && ehBooleano(c.valor));
+  const niveisList = (configs||[]).filter(c => c.chave.startsWith("mensalidade_nivel_"))
+    .sort((a,b) => parseInt(a.chave.split("_")[2]) - parseInt(b.chave.split("_")[2]));
+
   return (
-    <Card style={{ padding:24, maxWidth:600 }}>
-      <div style={{ fontSize:15, fontWeight:700, color:C.cream, marginBottom:20,
-        borderLeft:`3px solid ${C.gold}`, paddingLeft:10 }}>
-        ⚙️ Configurações Globais do Sistema
-      </div>
-      {(configs||[]).length === 0 && (
-        <div style={{ color:C.dim, fontSize:13 }}>Nenhuma configuração encontrada.</div>
-      )}
-      {(configs||[]).map(cfg => {
-        const meta = CONFIGS_LABEL[cfg.chave] || { label: cfg.chave, desc: cfg.descricao, icon: "⚙️" };
-        const ativo = cfg.valor === "true";
-        return (
-          <div key={cfg.chave} style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-            padding:"16px 0", borderBottom:`1px solid ${C.border}` }}>
-            <div>
-              <div style={{ fontSize:14, fontWeight:700, color:C.cream }}>
-                {meta.icon} {meta.label}
+    <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
+      {/* Toggles */}
+      <Card style={{ padding:24, maxWidth:600 }}>
+        <div style={{ fontSize:15, fontWeight:700, color:C.cream, marginBottom:20,
+          borderLeft:`3px solid ${C.gold}`, paddingLeft:10 }}>
+          ⚙️ Configurações Globais do Sistema
+        </div>
+        {toggles.length === 0 && (
+          <div style={{ color:C.dim, fontSize:13 }}>Nenhuma configuração encontrada.</div>
+        )}
+        {toggles.map(cfg => {
+          const meta = CONFIGS_LABEL[cfg.chave] || { label: cfg.chave, desc: cfg.descricao, icon: "⚙️" };
+          const ativo = ehAtivo(cfg.valor);
+          return (
+            <div key={cfg.chave} style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+              padding:"16px 0", borderBottom:`1px solid ${C.border}` }}>
+              <div>
+                <div style={{ fontSize:14, fontWeight:700, color:C.cream }}>{meta.icon} {meta.label}</div>
+                <div style={{ fontSize:12, color:C.dim, marginTop:2 }}>{meta.desc}</div>
               </div>
-              <div style={{ fontSize:12, color:C.dim, marginTop:2 }}>{meta.desc}</div>
-              <div style={{ fontSize:10, color:C.dim, marginTop:4 }}>
-                Atualizado em: {new Date(cfg.atualizado_em).toLocaleString("pt-BR")}
+              <div style={{ display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
+                <span style={{ fontSize:11, color: ativo ? C.win : C.dim, fontWeight:700 }}>{ativo ? "Ativo" : "Inativo"}</span>
+                <button onClick={() => toggle(cfg)} disabled={saving === cfg.chave}
+                  style={{ width:48, height:26, borderRadius:13, border:"none", cursor:"pointer",
+                    background: ativo ? C.win : C.dim, position:"relative", opacity: saving === cfg.chave ? 0.5 : 1 }}>
+                  <span style={{ position:"absolute", top:3, left: ativo ? 24 : 3,
+                    width:20, height:20, borderRadius:"50%", background:"white", display:"block" }}/>
+                </button>
               </div>
             </div>
-            <div style={{ display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
-              <span style={{ fontSize:11, color: ativo ? C.win : C.dim, fontWeight:700 }}>
-                {ativo ? "Ativo" : "Inativo"}
-              </span>
-              <button
-                onClick={() => toggle(cfg)}
+          );
+        })}
+      </Card>
+
+      {/* Níveis de Mensalidade */}
+      <Card style={{ padding:24, maxWidth:600 }}>
+        <div style={{ fontSize:15, fontWeight:700, color:C.cream, marginBottom:8,
+          borderLeft:`3px solid ${C.gold}`, paddingLeft:10 }}>
+          💰 Níveis de Mensalidade dos Times
+        </div>
+        <div style={{ fontSize:12, color:C.dim, marginBottom:16, paddingLeft:10 }}>
+          Defina o valor mensal de cada nível. Cada time é associado a um nível no cadastro.
+        </div>
+        {niveisList.map(cfg => {
+          const nivel = cfg.chave.split("_")[2];
+          return (
+            <div key={cfg.chave} style={{ display:"flex", alignItems:"center", gap:12,
+              padding:"10px 0", borderBottom:`1px solid ${C.border}` }}>
+              <div style={{ width:90, fontSize:13, fontWeight:700, color:C.cream }}>Nível {nivel}</div>
+              <div style={{ display:"flex", alignItems:"center", gap:6, flex:1 }}>
+                <span style={{ fontSize:13, color:C.dim }}>R$</span>
+                <input type="number" min="0" step="0.01"
+                  value={niveis[cfg.chave] ?? ""}
+                  onChange={e => setNiveis(prev => ({ ...prev, [cfg.chave]: e.target.value }))}
+                  style={{ width:120, background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8,
+                    color:C.cream, fontFamily:"inherit", fontSize:14, padding:"8px 12px", outline:"none" }}/>
+              </div>
+              <Btn variant="secondary" style={{ fontSize:11, padding:"6px 14px" }}
                 disabled={saving === cfg.chave}
-                style={{ width:48, height:26, borderRadius:13, border:"none",
-                  cursor:"pointer", background: ativo ? C.win : C.dim,
-                  position:"relative", transition:"background 0.2s",
-                  opacity: saving === cfg.chave ? 0.5 : 1 }}>
-                <span style={{ position:"absolute", top:3,
-                  left: ativo ? 24 : 3,
-                  width:20, height:20, borderRadius:"50%",
-                  background:"white", transition:"left 0.2s", display:"block" }}/>
+                onClick={() => salvarNivel(cfg.chave)}>
+                {saving === cfg.chave ? "..." : "Salvar"}
+              </Btn>
+            </div>
+          );
+        })}
+      </Card>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// MODAL EDITAR NÍVEL DE MENSALIDADE DO TIME
+// ══════════════════════════════════════════════════════════════
+function ModalNivelMensalidade({ time, onClose, onSalvo, show }) {
+  const { data: niveis } = useQuery(() =>
+    api.get(`config_sistema?chave=like.mensalidade_nivel_*&select=*`)
+  );
+  const [nivel, setNivel] = useState(String(time.nivel_mensalidade || 1));
+  const [saving, setSaving] = useState(false);
+
+  function valorDoNivel(n) {
+    const cfg = (niveis||[]).find(c => c.chave === `mensalidade_nivel_${n}`);
+    return cfg ? Number(cfg.valor) : 0;
+  }
+
+  async function salvar() {
+    setSaving(true);
+    try {
+      await api.patch(`time?id_time=eq.${time.id_time}`, { nivel_mensalidade: Number(nivel) });
+      onSalvo();
+    } catch(e) { show("Erro: " + e.message, "error"); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <Modal title={`Nível de Mensalidade — ${time.nome}`} onClose={onClose}>
+      <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+        <div style={{ fontSize:13, color:C.dim }}>
+          Selecione o nível de mensalidade que este time paga ao sistema.
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:8 }}>
+          {[1,2,3,4,5,6,7,8,9,10].map(n => {
+            const sel = String(n) === nivel;
+            return (
+              <button key={n} onClick={() => setNivel(String(n))}
+                style={{ background: sel ? C.gold+"22" : C.surf2,
+                  border:`2px solid ${sel ? C.gold : C.border}`, borderRadius:8,
+                  padding:"12px", cursor:"pointer", textAlign:"left",
+                  fontFamily:"inherit" }}>
+                <div style={{ fontSize:13, fontWeight:700, color: sel ? C.gold : C.cream }}>Nível {n}</div>
+                <div style={{ fontSize:12, color:C.dim, marginTop:2 }}>
+                  R$ {valorDoNivel(n).toFixed(2).replace(".", ",")}
+                </div>
               </button>
+            );
+          })}
+        </div>
+        <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
+          <Btn variant="secondary" onClick={onClose}>Cancelar</Btn>
+          <Btn onClick={salvar} disabled={saving}>{saving ? "Salvando..." : "Salvar Nível"}</Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// CONTROLE DE MENSALIDADES DOS TIMES (cobrança do sistema)
+// ══════════════════════════════════════════════════════════════
+const STATUS_MT = {
+  pago:     { label:"Pago",     cor:C.win,  icon:"✅" },
+  parcial:  { label:"Parcial",  cor:C.gold, icon:"⚠️" },
+  nao_pago: { label:"Não Pago", cor:C.loss, icon:"❌" },
+  isento:   { label:"Isento",   cor:C.dim,  icon:"🔵" },
+};
+const MESES_MT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
+  "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+
+function fmtBRL(v) {
+  return v != null ? `R$ ${Number(v).toFixed(2).replace(".", ",")}` : "—";
+}
+
+function CrudMensalidadeTimes({ show }) {
+  const hoje = new Date();
+  const [mesSel, setMesSel] = useState(hoje.getMonth() + 1);
+  const [anoSel, setAnoSel] = useState(hoje.getFullYear());
+  const [modalPag, setModalPag] = useState(null);
+  const [form, setForm] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [uploadingComp, setUploadingComp] = useState(false);
+  const [filtroStatus, setFiltroStatus] = useState("todos");
+
+  const { data: times } = useQuery(() =>
+    api.get(`time?select=id_time,nome,nivel_mensalidade,status&order=nome.asc`)
+  );
+  const { data: niveis } = useQuery(() =>
+    api.get(`config_sistema?chave=like.mensalidade_nivel_*&select=*`)
+  );
+  const { data: pagamentos, reload: reloadPag } = useQuery(() =>
+    api.get(`mensalidade_time?mes=eq.${mesSel}&ano=eq.${anoSel}&select=*`),
+    [mesSel, anoSel]
+  );
+
+  function valorNivel(n) {
+    const cfg = (niveis||[]).find(c => c.chave === `mensalidade_nivel_${n}`);
+    return cfg ? Number(cfg.valor) : 0;
+  }
+
+  const timesComStatus = (times||[]).map(t => {
+    const pag = (pagamentos||[]).find(p => p.id_time === t.id_time);
+    const esperado = valorNivel(t.nivel_mensalidade || 1);
+    return { ...t, pag: pag || null, status: pag?.status || "nao_pago", esperado };
+  });
+
+  const filtrados = filtroStatus === "todos"
+    ? timesComStatus
+    : timesComStatus.filter(t => t.status === filtroStatus);
+
+  // Totais
+  const totalEsperado = timesComStatus
+    .filter(t => t.status !== "isento")
+    .reduce((s, t) => s + (t.pag?.valor_esperado ?? t.esperado), 0);
+  const totalRecebido = timesComStatus.reduce((s, t) => s + (t.pag?.valor_pago || 0), 0);
+  const totalPendente = timesComStatus
+    .filter(t => t.status === "nao_pago" || t.status === "parcial")
+    .reduce((s, t) => s + ((t.pag?.valor_esperado ?? t.esperado) - (t.pag?.valor_pago || 0)), 0);
+
+  function abrirModal(t) {
+    setForm({
+      id_time: t.id_time,
+      mes: mesSel, ano: anoSel,
+      status: t.pag?.status || "pago",
+      valor_esperado: t.pag?.valor_esperado ?? t.esperado,
+      valor_pago: t.pag?.valor_pago ?? t.esperado,
+      data_pagamento: t.pag?.data_pagamento || new Date().toISOString().split("T")[0],
+      comprovante_url: t.pag?.comprovante_url || "",
+      observacoes: t.pag?.observacoes || "",
+      _nome: t.nome,
+      _id_mens: t.pag?.id_mensalidade_time,
+    });
+    setModalPag(t);
+  }
+
+  function setF(k, v) { setForm(f => ({ ...f, [k]: v })); }
+
+  async function uploadComprovante(file) {
+    if (!file) return;
+    setUploadingComp(true);
+    try {
+      const ext = file.name.split(".").pop();
+      const nome = `comp_${form.id_time}_${form.mes}_${form.ano}_${Date.now()}.${ext}`;
+      const res = await fetch(`${SUPABASE_URL}/storage/v1/object/comprovantes/${nome}`, {
+        method: "POST",
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SESSION_TOKEN || SUPABASE_KEY}`,
+          "Content-Type": file.type,
+        },
+        body: file,
+      });
+      if (!res.ok) throw new Error("Falha no upload do comprovante.");
+      const url = `${SUPABASE_URL}/storage/v1/object/public/comprovantes/${nome}`;
+      setF("comprovante_url", url);
+      show("Comprovante anexado!");
+    } catch(e) { show("Erro: " + e.message, "error"); }
+    finally { setUploadingComp(false); }
+  }
+
+  async function salvar() {
+    setSaving(true);
+    try {
+      const body = {
+        id_time: form.id_time, mes: form.mes, ano: form.ano,
+        status: form.status,
+        valor_esperado: Number(form.valor_esperado) || 0,
+        valor_pago: Number(form.valor_pago) || 0,
+        data_pagamento: form.data_pagamento || null,
+        comprovante_url: form.comprovante_url || null,
+        observacoes: form.observacoes || null,
+        atualizado_em: new Date().toISOString(),
+      };
+      if (form._id_mens) {
+        await api.patch(`mensalidade_time?id_mensalidade_time=eq.${form._id_mens}`, body);
+      } else {
+        await api.post(`mensalidade_time`, body);
+      }
+      show("Pagamento salvo!"); setModalPag(null); reloadPag();
+    } catch(e) { show("Erro: " + e.message, "error"); }
+    finally { setSaving(false); }
+  }
+
+  async function marcarPago(t) {
+    const body = {
+      id_time: t.id_time, mes: mesSel, ano: anoSel, status: "pago",
+      valor_esperado: t.esperado, valor_pago: t.esperado,
+      data_pagamento: new Date().toISOString().split("T")[0],
+      atualizado_em: new Date().toISOString(),
+    };
+    try {
+      if (t.pag?.id_mensalidade_time) {
+        await api.patch(`mensalidade_time?id_mensalidade_time=eq.${t.pag.id_mensalidade_time}`, body);
+      } else {
+        await api.post(`mensalidade_time`, body);
+      }
+      show(`${t.nome}: Pago ✅`); reloadPag();
+    } catch(e) { show("Erro: " + e.message, "error"); }
+  }
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+      {/* Seletor mês/ano + resumo */}
+      <Card style={{ padding:"16px 20px" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:16, flexWrap:"wrap", justifyContent:"space-between" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <button onClick={() => { let m=mesSel-1,a=anoSel; if(m<1){m=12;a--;} setMesSel(m); setAnoSel(a); }}
+              style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:6, color:C.dim, cursor:"pointer", padding:"4px 12px", fontFamily:"inherit", fontSize:16 }}>‹</button>
+            <div style={{ textAlign:"center", minWidth:160 }}>
+              <div style={{ fontSize:18, fontWeight:800, color:C.cream }}>{MESES_MT[mesSel-1]} {anoSel}</div>
+              <div style={{ fontSize:11, color:C.dim }}>Mensalidade dos times ao sistema</div>
+            </div>
+            <button onClick={() => { let m=mesSel+1,a=anoSel; if(m>12){m=1;a++;} setMesSel(m); setAnoSel(a); }}
+              style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:6, color:C.dim, cursor:"pointer", padding:"4px 12px", fontFamily:"inherit", fontSize:16 }}>›</button>
+          </div>
+          <div style={{ display:"flex", gap:12 }}>
+            {[
+              { label:"Previsto",  valor:fmtBRL(totalEsperado), cor:C.cream },
+              { label:"Recebido",  valor:fmtBRL(totalRecebido), cor:C.win },
+              { label:"A Receber", valor:fmtBRL(totalPendente), cor: totalPendente>0 ? C.loss : C.win },
+            ].map(s => (
+              <div key={s.label} style={{ textAlign:"center", background:C.surf2, borderRadius:8, padding:"10px 16px" }}>
+                <div style={{ fontSize:16, fontWeight:800, color:s.cor }}>{s.valor}</div>
+                <div style={{ fontSize:10, color:C.dim, textTransform:"uppercase" }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Card>
+
+      {/* Filtros */}
+      <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+        {[["todos","Todos",C.cream], ...Object.entries(STATUS_MT).map(([k,v])=>[k,v.label,v.cor])].map(([k,l,c]) => (
+          <button key={k} onClick={() => setFiltroStatus(k)}
+            style={{ background: filtroStatus===k ? c+"33" : C.surface, color: filtroStatus===k ? c : C.dim,
+              border:`1px solid ${filtroStatus===k ? c : C.border}`, borderRadius:8, padding:"5px 14px",
+              fontFamily:"inherit", fontWeight:700, fontSize:11, cursor:"pointer", textTransform:"uppercase" }}>
+            {l} {k !== "todos" && `(${timesComStatus.filter(t=>t.status===k).length})`}
+          </button>
+        ))}
+      </div>
+
+      {/* Tabela */}
+      <Card style={{ padding:0, overflow:"hidden" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+          <thead><tr style={{ background:C.surf2 }}>
+            {["Time","Nível","Status","Esperado","Pago","Comprovante","Ações"].map(h => (
+              <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontSize:11, color:C.dim, textTransform:"uppercase", fontWeight:700 }}>{h}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {filtrados.map((t,i) => {
+              const cfg = STATUS_MT[t.status] || STATUS_MT.nao_pago;
+              const esperado = t.pag?.valor_esperado ?? t.esperado;
+              const pago = t.pag?.valor_pago || 0;
+              return (
+                <tr key={t.id_time} style={{ background:i%2===0?C.surface:C.bg }}>
+                  <td style={{ padding:"11px 14px", fontWeight:700, color:C.cream }}>{t.nome}</td>
+                  <td style={{ padding:"11px 14px", color:C.dim }}>Nível {t.nivel_mensalidade||1}</td>
+                  <td style={{ padding:"11px 14px" }}>
+                    <span style={{ background:cfg.cor+"22", color:cfg.cor, border:`1px solid ${cfg.cor}44`, borderRadius:6, padding:"2px 10px", fontSize:11, fontWeight:700 }}>
+                      {cfg.icon} {cfg.label}
+                    </span>
+                  </td>
+                  <td style={{ padding:"11px 14px", color:C.dim }}>{t.status==="isento" ? "—" : fmtBRL(esperado)}</td>
+                  <td style={{ padding:"11px 14px", color:C.win, fontWeight:700 }}>{pago>0 ? fmtBRL(pago) : "—"}</td>
+                  <td style={{ padding:"11px 14px" }}>
+                    {t.pag?.comprovante_url
+                      ? <a href={t.pag.comprovante_url} target="_blank" rel="noopener noreferrer" style={{ color:C.gold, fontSize:12, textDecoration:"none" }}>📎 Ver</a>
+                      : <span style={{ color:C.dim, fontSize:12 }}>—</span>}
+                  </td>
+                  <td style={{ padding:"11px 14px", display:"flex", gap:6 }}>
+                    {t.status !== "pago" && t.status !== "isento" && (
+                      <Btn style={{ fontSize:11, padding:"4px 10px", background:C.win, color:"white" }}
+                        onClick={() => marcarPago(t)}>✅ Pago</Btn>
+                    )}
+                    <Btn variant="secondary" style={{ fontSize:11, padding:"4px 10px" }}
+                      onClick={() => abrirModal(t)}>Detalhes</Btn>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </Card>
+
+      {/* Modal de pagamento */}
+      {modalPag && (
+        <Modal title={`Mensalidade — ${form._nome} — ${MESES_MT[mesSel-1]} ${anoSel}`} onClose={() => setModalPag(null)}>
+          <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+            {/* Status */}
+            <div>
+              <div style={{ fontSize:11, color:C.dim, textTransform:"uppercase", marginBottom:8 }}>Status</div>
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                {Object.entries(STATUS_MT).map(([k,v]) => (
+                  <button key={k} onClick={() => {
+                    setF("status", k);
+                    if (k === "pago") setF("valor_pago", form.valor_esperado);
+                    if (k === "isento") { setF("valor_esperado", 0); setF("valor_pago", 0); }
+                    if (k === "nao_pago") setF("valor_pago", 0);
+                  }}
+                    style={{ background: form.status===k ? v.cor+"33" : C.surface,
+                      color: form.status===k ? v.cor : C.dim,
+                      border:`2px solid ${form.status===k ? v.cor : C.border}`,
+                      borderRadius:8, padding:"8px 16px", fontFamily:"inherit", fontWeight:700,
+                      fontSize:12, cursor:"pointer", textTransform:"uppercase" }}>
+                    {v.icon} {v.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Valores */}
+            {form.status !== "isento" && (
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                <Input label="Valor Esperado (R$)" type="number" min="0" step="0.01"
+                  value={form.valor_esperado||""} onChange={e => setF("valor_esperado", e.target.value)}/>
+                <Input label={form.status==="parcial" ? "Valor Pago (parcial)" : "Valor Pago (R$)"}
+                  type="number" min="0" step="0.01"
+                  value={form.valor_pago||""} onChange={e => setF("valor_pago", e.target.value)}/>
+              </div>
+            )}
+            {form.status !== "isento" && form.status !== "nao_pago" && (
+              <Input label="Data do Pagamento" type="date"
+                value={form.data_pagamento||""} onChange={e => setF("data_pagamento", e.target.value)}/>
+            )}
+            {/* Comprovante */}
+            {form.status !== "isento" && form.status !== "nao_pago" && (
+              <div>
+                <div style={{ fontSize:11, color:C.dim, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700, marginBottom:6 }}>Comprovante de Pagamento</div>
+                {form.comprovante_url ? (
+                  <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                    <a href={form.comprovante_url} target="_blank" rel="noopener noreferrer"
+                      style={{ color:C.gold, fontSize:13, textDecoration:"none" }}>📎 Ver comprovante anexado</a>
+                    <button onClick={() => setF("comprovante_url", "")}
+                      style={{ background:"none", border:"none", color:C.loss, cursor:"pointer", fontSize:12 }}>Remover</button>
+                  </div>
+                ) : (
+                  <label style={{ display:"inline-flex", alignItems:"center", gap:8, background:C.surf2,
+                    border:`1px dashed ${C.border}`, borderRadius:8, padding:"10px 16px", cursor:"pointer", fontSize:13, color:C.dim }}>
+                    {uploadingComp ? "Enviando..." : "📎 Anexar comprovante (imagem ou PDF)"}
+                    <input type="file" accept="image/*,application/pdf" style={{ display:"none" }}
+                      onChange={e => uploadComprovante(e.target.files[0])} disabled={uploadingComp}/>
+                  </label>
+                )}
+              </div>
+            )}
+            <Input label="Observações" value={form.observacoes||""}
+              onChange={e => setF("observacoes", e.target.value)}/>
+            {/* Saldo */}
+            {form.status !== "isento" && (
+              <div style={{ background:C.surf2, borderRadius:8, padding:"12px 16px", display:"flex", justifyContent:"space-between" }}>
+                <span style={{ color:C.dim }}>Saldo devedor:</span>
+                <span style={{ fontWeight:800, fontSize:15, color:
+                  (form.valor_esperado||0)-(form.valor_pago||0) > 0 ? C.loss : C.win }}>
+                  {fmtBRL((form.valor_esperado||0)-(form.valor_pago||0))}
+                </span>
+              </div>
+            )}
+            <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
+              <Btn variant="secondary" onClick={() => setModalPag(null)}>Cancelar</Btn>
+              <Btn onClick={salvar} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Btn>
             </div>
           </div>
-        );
-      })}
-    </Card>
+        </Modal>
+      )}
+    </div>
   );
 }
 

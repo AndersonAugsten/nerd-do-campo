@@ -82,7 +82,7 @@ function SeletorTimes({ onSelect }) {
   const { data: allTimes, loading } = useQuery(() => sb(`time?select=*,temporada(id_temporada,nome,data_inicio,data_fim,publico),tipo_time(id_tipo_time,descricao),cidade:id_cidade_sede(nome,estado),campo:id_campo(nome)&publico=eq.true&order=nome.asc`));
   const { data: tiposAtivos } = useQuery(() => sb(`tipo_time?select=*&status=eq.Ativo&order=descricao.asc`));
   const { data: configSistema } = useQuery(() => sb(`config_sistema?chave=eq.cadastro_time_ativo&select=valor&limit=1`));
-  const cadastroAtivo = configSistema?.[0]?.valor === "true";
+  const cadastroAtivo = ["true","1"].includes(String(configSistema?.[0]?.valor ?? "").trim().toLowerCase());
   const tipoFutebolCampo = (tiposAtivos||[]).find(t => t.descricao.toLowerCase().includes("campo"))?.id_tipo_time || null;
   const [tipoFiltro, setTipoFiltro] = useState(null);
   // Inicializar com Futebol de Campo quando tipos carregarem
@@ -121,12 +121,25 @@ function SeletorTimes({ onSelect }) {
         </div>
       </header>
 
-      <main style={{ maxWidth:900, margin:"0 auto", padding:"60px 24px" }}>
+      <main style={{ maxWidth:900, margin:"0 auto", padding:"48px 24px 60px" }}>
         <div style={{ textAlign:"center", marginBottom:48 }}>
-          <div style={{ fontSize:32, fontWeight:800, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:12 }}>
-            Escolha um Time
+          {/* Logo em destaque */}
+          <div style={{ display:"inline-block", position:"relative", marginBottom:24 }}>
+            <div style={{ position:"absolute", inset:-12, borderRadius:"50%",
+              background:`radial-gradient(circle, ${C.gold}33 0%, transparent 70%)`,
+              filter:"blur(8px)" }}/>
+            <img src="/logo.png" alt="Nerd do Campo"
+              style={{ width:120, height:120, borderRadius:"50%", objectFit:"cover",
+                border:`3px solid ${C.gold}`, position:"relative",
+                boxShadow:`0 8px 32px ${C.gold}44` }}/>
           </div>
-          <div style={{ fontSize:15, color:C.dim }}>Selecione o time para ver as estatísticas da temporada</div>
+          <div style={{ fontSize:34, fontWeight:800, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8, color:C.cream }}>
+            Nerd do Campo
+          </div>
+          <div style={{ fontSize:13, color:C.gold, letterSpacing:"0.12em", textTransform:"uppercase", fontWeight:700, marginBottom:20 }}>
+            Estatísticas de Futebol Amador
+          </div>
+          <div style={{ fontSize:15, color:C.dim }}>Selecione um time para ver as estatísticas da temporada</div>
         </div>
 
         {/* Filtro de tipo de time */}
@@ -243,8 +256,11 @@ function SeletorTimes({ onSelect }) {
         </div>
       )}
 
-      <footer style={{ textAlign:"center", padding:"20px", color:C.dim, fontSize:12, borderTop:`1px solid ${C.border}`, marginTop:20 }}>
-        ⚽ Nerd do Campo — Estatísticas de Futebol Amador
+      <footer style={{ textAlign:"center", padding:"24px 20px", color:C.dim, fontSize:12, borderTop:`1px solid ${C.border}`, marginTop:20 }}>
+        <div style={{ marginBottom:8 }}>⚽ Nerd do Campo — Estatísticas de Futebol Amador</div>
+        <div style={{ fontSize:11, color:C.gold, letterSpacing:"0.08em", opacity:0.85 }}>
+          ⚽ Designed by Caxpa Augsten
+        </div>
       </footer>
 
       {modalCadastro && <ModalSolicitacao onClose={() => setModalCadastro(false)}/>}
@@ -813,6 +829,12 @@ function TimeApp({ time, onVoltar }) {
       {/* Conteúdo */}
       <main style={{ maxWidth:1200, margin:"0 auto", padding:"12px 10px 20px" }}>
         {screens[tab]}
+        {/* Assinatura */}
+        <div style={{ textAlign:"center", padding:"24px 12px 8px", marginTop:16, borderTop:`1px solid ${C.border}` }}>
+          <div style={{ fontSize:11, color:C.gold, letterSpacing:"0.08em", opacity:0.85 }}>
+            ⚽ Designed by Caxpa Augsten
+          </div>
+        </div>
       </main>
 
       {/* Menu inferior fixo */}
@@ -1055,6 +1077,34 @@ function ModalSolicitacao({ onClose }) {
 
 export default function App() {
   const [timeSel, setTimeSel] = useState(null);
+  const { data: manut, loading: loadManut } = useQuery(() =>
+    sb(`config_sistema?chave=eq.sistema_manutencao&select=valor&limit=1`)
+  );
+
+  if (loadManut) return null;
+  if (["true","1"].includes(String(manut?.[0]?.valor ?? "").trim().toLowerCase())) return <TelaManutencao/>;
+
   if (timeSel) return <TimeApp time={timeSel} onVoltar={() => setTimeSel(null)} />;
   return <SeletorTimes onSelect={setTimeSel} />;
+}
+
+// ── Tela de Manutenção ────────────────────────────────────────
+function TelaManutencao() {
+  return (
+    <div style={{ minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center", padding:24, fontFamily:"'Oswald','Arial Narrow',Arial,sans-serif" }}>
+      <div style={{ textAlign:"center", maxWidth:420 }}>
+        <div style={{ fontSize:64, marginBottom:20 }}>🔧</div>
+        <div style={{ fontSize:26, fontWeight:800, color:C.cream, marginBottom:14, textTransform:"uppercase", letterSpacing:"0.06em" }}>
+          Sistema em Manutenção
+        </div>
+        <div style={{ fontSize:15, color:C.dim, lineHeight:1.7 }}>
+          Estamos realizando melhorias no Nerd do Campo.
+          Volte em alguns instantes — já já estaremos de volta! ⚽
+        </div>
+        <div style={{ fontSize:13, color:C.gold, fontWeight:700, marginTop:24 }}>
+          nerddocampo.com.br
+        </div>
+      </div>
+    </div>
+  );
 }
