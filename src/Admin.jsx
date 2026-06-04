@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-const APP_VERSION = process.env.REACT_APP_VERSION || "1.1.1";
+const APP_VERSION = process.env.REACT_APP_VERSION || "1.9.0";
 
 // ── Supabase ──────────────────────────────────────────────────
 const URL  = process.env.REACT_APP_SUPABASE_URL || "https://nxztffulmvohduvudbhg.supabase.co";
@@ -2420,7 +2420,7 @@ function PaginaAjuda() {
           O manual contém o guia completo do sistema — desde o cadastro inicial
           até o controle de mensalidades. Atualizado para a versão atual.
         </div>
-        <a href="/manual.pdf?v=1.6.1" target="_blank" rel="noopener noreferrer"
+        <a href="/manual.pdf?v=1.9.0" target="_blank" rel="noopener noreferrer"
           style={{ display:"inline-flex", alignItems:"center", gap:10,
             background:C.gold, color:"#0B3D2E", borderRadius:10,
             padding:"14px 28px", fontFamily:"inherit", fontWeight:800,
