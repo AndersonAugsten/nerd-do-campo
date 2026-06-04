@@ -1180,16 +1180,16 @@ function ListaPartidas({ temporada, onSelect, onNova, adversarios, campos, show:
 
 // Wrapper que busca adversarios e campos para passar à ListaPartidas
 function ListaPartidasWrapper({ temporada, onSelect, onNova, show, readOnly }) {
-  const { data: adversarios } = useQuery(() => api.get(`adversario?select=*&order=nome.asc`));
+  const { data: adversarios } = useQuery(() => temporada?.id_time ? api.get(`adversario?id_time=eq.${temporada.id_time}&select=*&order=nome.asc`) : Promise.resolve([]), [temporada]);
   const { data: campos }      = useQuery(() => api.get(`campo?select=*&order=nome.asc`));
   return <ListaPartidas temporada={temporada} onSelect={onSelect} onNova={onNova} adversarios={adversarios} campos={campos} show={show}/>;
 }
 
 // ── FORM NOVA PARTIDA ─────────────────────────────────────────
 function FormNovaPartida({ temporada, onSalvo, onCancelar, readOnly = false }) {
-  const { data: adversarios } = useQuery(() => api.get(`adversario?select=*&order=nome.asc`));
+  const { data: adversarios } = useQuery(() => temporada?.id_time ? api.get(`adversario?id_time=eq.${temporada.id_time}&select=*&order=nome.asc`) : Promise.resolve([]), [temporada]);
   const { data: campos }      = useQuery(() => api.get(`campo?select=*&order=nome.asc`));
-  const { data: time }        = useQuery(() => api.get(`time?select=*&limit=1`));
+  const { data: time }        = useQuery(() => temporada?.id_time ? api.get(`time?id_time=eq.${temporada.id_time}&select=*&limit=1`) : Promise.resolve([]), [temporada]);
 
   const [form, setForm] = useState({ data: "", horario: "14:00", id_adversario: "", em_casa: "S", id_campo: "", observacoes: "" });
   const [saving, setSaving] = useState(false);
@@ -1260,7 +1260,7 @@ function FichaPartida({ partida: p0, onVoltar, readOnly, idTime }) {
   const [partida, setPartida] = useState(p0);
   const { toast, show } = useToast();
 
-  const { data: jogadores }     = useQuery(() => api.get(`jogador?id_jogador=gt.0&select=*,posicao(nome)&order=camisa.asc`));
+  const { data: jogadores }     = useQuery(() => idTime ? api.get(`jogador?id_jogador=gt.0&id_time=eq.${idTime}&select=*,posicao(nome)&order=camisa.asc`) : Promise.resolve([]), [idTime]);
   const { data: posicoes }      = useQuery(() => api.get(`posicao?select=*&order=ordem.asc`));
   const { data: participacoes, reload: reloadPart } = useQuery(
     () => api.get(`participacao?id_partida=eq.${partida.id_partida}&id_jogador=gt.0&select=*,jogador(nome,apelido,camisa),posicao(nome)&order=camisa.asc`),
@@ -3182,15 +3182,15 @@ export default function AdminAppCompleto() {
   }, [permissoesRaw]);
 
   const { data: temporadas } = useQuery(() => 
-    idTime ? api.get(`temporada?id_time=eq.${idTime}&select=*&order=data_inicio.desc`) : api.get(`temporada?select=*&order=data_inicio.desc`),
+    idTime ? api.get(`temporada?id_time=eq.${idTime}&select=*&order=data_inicio.desc`) : Promise.resolve([]),
     [session, idTime]
   );
   // Dados para onboarding
   const { data: _cidades }    = useQuery(() => api.get(`cidade?select=id_cidade&limit=1`), [session]);
   const { data: _campos }     = useQuery(() => api.get(`campo?select=id_campo&limit=1`), [session]);
   const { data: _posicoes }   = useQuery(() => api.get(`posicao?select=id_posicao&limit=1`), [session]);
-  const { data: _adversarios } = useQuery(() => idTime ? api.get(`adversario?id_time=eq.${idTime}&select=id_adversario&limit=1`) : api.get(`adversario?select=id_adversario&limit=1`), [session, idTime]);
-  const { data: _jogadores }  = useQuery(() => idTime ? api.get(`jogador?id_time=eq.${idTime}&id_jogador=gt.0&select=id_jogador&limit=1`) : api.get(`jogador?id_jogador=gt.0&select=id_jogador&limit=1`), [session, idTime]);
+  const { data: _adversarios } = useQuery(() => idTime ? api.get(`adversario?id_time=eq.${idTime}&select=id_adversario&limit=1`) : Promise.resolve([]), [session, idTime]);
+  const { data: _jogadores }  = useQuery(() => idTime ? api.get(`jogador?id_time=eq.${idTime}&id_jogador=gt.0&select=id_jogador&limit=1`) : Promise.resolve([]), [session, idTime]);
   const { data: _partidas }   = useQuery(() => api.get(`partida?select=id_partida&limit=1`), [session]);
   const [temporadaSel, setTemporadaSel] = useState(null);
   useEffect(() => { if (temporadas?.length && !temporadaSel) setTemporadaSel(temporadas[0]); }, [temporadas]);
@@ -3465,7 +3465,7 @@ function TabelaJogadores({ grupo, lista, sk, asc, onSort, onEditar, onInativar, 
 function CrudJogadores({ idTime, show, readOnly }) {
   const _idTimeJ = idTime; // recebido por prop (filtrado pelo usuário logado)
   const { data: jogadores, loading, reload } = useQuery(() => 
-    _idTimeJ ? api.get(`jogador?id_jogador=gt.0&id_time=eq.${_idTimeJ}&select=*,posicao(nome)&order=camisa.asc`) : api.get(`jogador?id_jogador=gt.0&select=*,posicao(nome)&order=camisa.asc`),
+    _idTimeJ ? api.get(`jogador?id_jogador=gt.0&id_time=eq.${_idTimeJ}&select=*,posicao(nome)&order=camisa.asc`) : Promise.resolve([]),
     [_idTimeJ]
   );
   const { data: posicoes } = useQuery(() => api.get(`posicao?id_posicao_pai=not.is.null&select=*&order=nome.asc`));
@@ -3636,7 +3636,7 @@ function CrudJogadores({ idTime, show, readOnly }) {
 function CrudAdversarios({ idTime, show, readOnly }) {
   const _idTimeA = idTime; // recebido por prop (filtrado pelo usuário logado)
   const { data: adversarios, loading, reload } = useQuery(() => 
-    _idTimeA ? api.get(`adversario?id_time=eq.${_idTimeA}&select=*,campo(nome),cidade(nome,estado)&order=nome.asc`) : api.get(`adversario?select=*,campo(nome),cidade(nome,estado)&order=nome.asc`),
+    _idTimeA ? api.get(`adversario?id_time=eq.${_idTimeA}&select=*,campo(nome),cidade(nome,estado)&order=nome.asc`) : Promise.resolve([]),
     [_idTimeA]
   );
   const [_sk, _setSk] = useState("nome"); const [_asc, _setAsc] = useState(true);
@@ -4152,9 +4152,10 @@ function CrudPosicoes({ idTime, show, readOnly }) {
 // ── CRUD TEMPORADAS ───────────────────────────────────────────
 function CrudTemporadas({ idTime, show, readOnly }) {
   const { data: temporadas, loading, reload } = useQuery(() =>
-    api.get(`temporada?select=*,time(nome)&order=data_inicio.desc`)
+    idTime ? api.get(`temporada?id_time=eq.${idTime}&select=*,time(nome)&order=data_inicio.desc`) : Promise.resolve([]),
+    [idTime]
   );
-  const { data: times } = useQuery(() => api.get(`time?select=*&order=nome.asc`));
+  const { data: times } = useQuery(() => idTime ? api.get(`time?id_time=eq.${idTime}&select=*&order=nome.asc`) : Promise.resolve([]), [idTime]);
   const [_sk, _setSk] = useState("data_inicio"); const [_asc, _setAsc] = useState(false);
   const [modal, setModal]   = useState(null);
   const [form, setForm]     = useState({});
