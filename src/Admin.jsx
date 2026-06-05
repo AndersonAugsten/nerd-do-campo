@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.0";
+const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.4";
 const UFS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 // Distância em km entre dois pontos (lat/long) — fórmula de Haversine
 function distanciaKm(lat1, lon1, lat2, lon2) {
@@ -218,7 +218,7 @@ function VisaoGeral({ temporada }) {
           <div style={{ display:"flex", alignItems:"center", gap:20, flexWrap:"wrap" }}>
             {temporada?.escudo_url && (
               <img src={temporada.escudo_url} alt="Escudo"
-                style={{ width:64, height:64, borderRadius:"50%", objectFit:"cover", border:`3px solid ${C.gold}` }}/>
+                style={{ width:88, height:88, borderRadius:"50%", objectFit:"cover", border:`3px solid ${C.gold}` }}/>
             )}
             {uniformes.length > 0 && (
               <div style={{ display:"flex", gap:16, flexWrap:"wrap" }}>
@@ -502,7 +502,7 @@ function Elenco({ time, temporada }) {
             {uniformes.map(u => (
               <div key={u.label} style={{ textAlign:"center" }}>
                 <img src={u.url} alt={u.label}
-                  style={{ width:100, height:100, objectFit:"contain", borderRadius:8, background:C.surf2, border:`1px solid ${C.border}`, display:"block", marginBottom:6 }}/>
+                  style={{ width:130, height:130, objectFit:"contain", borderRadius:8, background:C.surf2, border:`1px solid ${C.border}`, display:"block", marginBottom:6 }}/>
                 <div style={{ fontSize:11, color:C.dim }}>{u.label}</div>
               </div>
             ))}
@@ -927,7 +927,7 @@ function Input({ label, error, style: s = {}, ...p }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 5, ...s }}>
       {label && <label style={{ fontSize: 11, color: C.dim, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>{label}</label>}
-      <input {...p} style={{ background: C.surf2, border: `1px solid ${error ? C.loss : C.border}`, borderRadius: 8, padding: "9px 12px", color: C.cream, fontFamily: "inherit", fontSize: 14, outline: "none", width: "100%" }} />
+      <input {...p} style={{ background: C.surf2, border: `1px solid ${error ? C.loss : C.border}`, borderRadius: 8, padding: "9px 12px", color: C.cream, fontFamily: "inherit", fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }} />
       {error && <span style={{ color: C.loss, fontSize: 12 }}>{error}</span>}
     </div>
   );
@@ -936,7 +936,7 @@ function Select({ label, children, error, style: s = {}, ...p }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 5, ...s }}>
       {label && <label style={{ fontSize: 11, color: C.dim, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>{label}</label>}
-      <select {...p} style={{ background: C.surf2, border: `1px solid ${error ? C.loss : C.border}`, borderRadius: 8, padding: "9px 12px", color: C.cream, fontFamily: "inherit", fontSize: 14, outline: "none", width: "100%" }}>
+      <select {...p} style={{ background: C.surf2, border: `1px solid ${error ? C.loss : C.border}`, borderRadius: 8, padding: "9px 12px", color: C.cream, fontFamily: "inherit", fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }}>
         {children}
       </select>
       {error && <span style={{ color: C.loss, fontSize: 12 }}>{error}</span>}
@@ -2752,7 +2752,7 @@ function PaginaAjuda() {
           O manual contém o guia completo do sistema — desde o cadastro inicial
           até o controle de mensalidades. Atualizado para a versão atual.
         </div>
-        <a href="/manual.pdf?v=1.12.0" target="_blank" rel="noopener noreferrer"
+        <a href="/manual.pdf?v=1.13.0" target="_blank" rel="noopener noreferrer"
           style={{ display:"inline-flex", alignItems:"center", gap:10,
             background:C.gold, color:"#0B3D2E", borderRadius:10,
             padding:"14px 28px", fontFamily:"inherit", fontWeight:800,
@@ -4418,7 +4418,13 @@ function CrudTemporadas({ idTime, show, readOnly }) {
 
   function abrirNovo() {
     const t = times?.[0];
-    setForm({ nome:"", id_time: t ? String(t.id_time) : "", data_inicio:"", data_fim:"", publico: true, escudo_url: t?.escudo_url||null, tecnico: t?.tecnico||"", presidente: t?.presidente||"", vice_presidente: t?.vice_presidente||"", financeiro: t?.financeiro||"", vice_financeiro: t?.vice_financeiro||"", marca_jogos: t?.marca_jogos||"", resp_redes_sociais: t?.resp_redes_sociais||"", resp_eventos: t?.resp_eventos||"", observacoes:"" });
+    const ultima = temporadas?.[0]; // mais recente (ordenado por data_inicio desc)
+    setForm({ nome:"", id_time: t ? String(t.id_time) : "", data_inicio:"", data_fim:"", publico: true,
+      escudo_url: ultima?.escudo_url || t?.escudo_url || null,
+      uniforme_1_url: ultima?.uniforme_1_url || null,
+      uniforme_2_url: ultima?.uniforme_2_url || null,
+      uniforme_3_url: ultima?.uniforme_3_url || null,
+      tecnico: t?.tecnico||"", presidente: t?.presidente||"", vice_presidente: t?.vice_presidente||"", financeiro: t?.financeiro||"", vice_financeiro: t?.vice_financeiro||"", marca_jogos: t?.marca_jogos||"", resp_redes_sociais: t?.resp_redes_sociais||"", resp_eventos: t?.resp_eventos||"", observacoes:"" });
     setModal("novo");
   }
   function abrirEditar(t) { setForm({ ...t, publico: t.publico !== false, uniforme_1_url: t.uniforme_1_url||null, uniforme_2_url: t.uniforme_2_url||null, uniforme_3_url: t.uniforme_3_url||null, escudo_url: t.escudo_url||null, id_time: t.id_time ? String(t.id_time) : "" }); setModal(t); }
@@ -4716,7 +4722,7 @@ function ConfigTime({ idTime, show, readOnly }) {
         <div style={{ fontSize:11, color:C.gold, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700, borderLeft:`3px solid ${C.gold}`, paddingLeft:10 }}>Identidade</div>
         <div style={{ display:"flex", alignItems:"flex-start", gap:20 }}>
           <ImageUpload label="Escudo" value={form.escudo_url||""} onUpload={url => set("escudo_url", url)} bucket="escudos" nomeArquivo={`time_${form.id_time}`}/>
-          <div style={{ flex:1, display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+          <div className="form-grid-2" style={{ flex:1, display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
             <Input label="Nome do Time *" value={form.nome||""} onChange={e => set("nome", e.target.value)}/>
             <Input label="Telefone" value={form.telefone||""} onChange={e => set("telefone", e.target.value)}/>
             <Input label="Data de Fundação" type="date" value={form.data_fundacao||""} onChange={e => set("data_fundacao", e.target.value)}/>
@@ -4739,7 +4745,7 @@ function ConfigTime({ idTime, show, readOnly }) {
 
         {/* Tipo de Time */}
         <div style={{ fontSize:11, color:C.gold, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700, borderLeft:`3px solid ${C.gold}`, paddingLeft:10 }}>Tipo de Time</div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, alignItems:"end" }}>
+        <div className="form-grid-2" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, alignItems:"end" }}>
           <Select label="Tipo de Time" value={form.id_tipo_time||""} onChange={e => aplicarTipo(e.target.value)}>
             <option value="">Selecione...</option>
             {(tipos||[]).map(t => <option key={t.id_tipo_time} value={t.id_tipo_time}>{t.descricao}</option>)}
@@ -4751,7 +4757,7 @@ function ConfigTime({ idTime, show, readOnly }) {
 
         {/* Regras do Jogo */}
         <div style={{ fontSize:11, color:C.gold, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700, borderLeft:`3px solid ${C.gold}`, paddingLeft:10 }}>Regras do Jogo</div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))", gap:12 }}>
+        <div className="form-grid-auto" style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))", gap:12 }}>
           <Input label="Nº Titulares"    type="number" min="1" value={form.numero_titulares||""} onChange={e => set("numero_titulares", e.target.value)} />
           <Input label="Qtd. Períodos"   type="number" min="1" value={form.quantidade_periodos||""} onChange={e => set("quantidade_periodos", e.target.value)} />
           <Input label="Min. por Período" type="number" min="1" value={form.minutos_padrao_periodo||""} onChange={e => set("minutos_padrao_periodo", e.target.value)} />
@@ -4762,7 +4768,7 @@ function ConfigTime({ idTime, show, readOnly }) {
         </div>
 
         <div style={{ fontSize:11, color:C.gold, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700, marginTop:4, borderLeft:`3px solid ${C.gold}`, paddingLeft:10 }}>Comissão Atual</div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+        <div className="form-grid-2" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
           <Input label="Técnico"         value={form.tecnico||""}         onChange={e => set("tecnico",          e.target.value)} />
           <Input label="Presidente"      value={form.presidente||""}      onChange={e => set("presidente",       e.target.value)} />
           <Input label="Vice-Presidente" value={form.vice_presidente||""} onChange={e => set("vice_presidente",  e.target.value)} />

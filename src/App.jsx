@@ -75,6 +75,43 @@ function fmtData(ts) { return ts ? new Date(ts).toLocaleDateString("pt-BR") : "�
 function fmtHora(ts) { return ts ? new Date(ts).toLocaleTimeString("pt-BR", { hour:"2-digit", minute:"2-digit" }) : "—"; }
 
 // ── SELETOR DE TIMES ──────────────────────────────────────────
+function CardTime({ t, onSelect, destaque = false }) {
+  return (
+    <div
+      onClick={() => onSelect(t)}
+      style={{ background:C.surface, borderRadius:16, padding:"28px 24px", border:`1px solid ${destaque ? C.gold : C.border}`, boxShadow: destaque ? `0 0 0 1px ${C.gold}33` : "none", cursor:"pointer", transition:"all 0.2s", textAlign:"center", position:"relative" }}
+      onMouseEnter={e => { e.currentTarget.style.background = C.surf2; e.currentTarget.style.borderColor = C.gold; e.currentTarget.style.transform = "translateY(-2px)"; }}
+      onMouseLeave={e => { e.currentTarget.style.background = C.surface; e.currentTarget.style.borderColor = destaque ? C.gold : C.border; e.currentTarget.style.transform = "none"; }}>
+      {destaque && (
+        <div style={{ position:"absolute", top:12, right:12, fontSize:10, fontWeight:800, color:C.gold, background:`${C.gold}1A`, border:`1px solid ${C.gold}55`, borderRadius:6, padding:"2px 8px", textTransform:"uppercase", letterSpacing:"0.06em" }}>⭐ Oficial</div>
+      )}
+      {t.escudo_url
+        ? <img src={t.escudo_url} alt={t.nome} style={{ width:96, height:96, borderRadius:"50%", objectFit:"cover", border:`3px solid ${C.gold}`, margin:"0 auto 16px", display:"block" }}/>
+        : <div style={{ width:96, height:96, borderRadius:"50%", background:C.surf2, border:`3px solid ${C.gold}`, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 16px", fontSize:36 }}>⚽</div>
+      }
+      <div style={{ fontSize:18, fontWeight:800, textTransform:"uppercase", marginBottom:8 }}>{t.nome}</div>
+      {t.data_fundacao && (
+        <div style={{ fontSize:11, color:C.dim, marginBottom:6 }}>Fundado em {new Date(t.data_fundacao).getFullYear()}</div>
+      )}
+      {t.marca_jogos && (
+        <div style={{ fontSize:12, color:C.dim, marginBottom:4 }}>📋 <span style={{ color:C.cream }}>Marca jogos:</span> {t.marca_jogos}</div>
+      )}
+      {t.telefone && (
+        <div style={{ fontSize:12, color:C.dim }}>📞 <span style={{ color:C.cream }}>{t.telefone}</span></div>
+      )}
+      {t.resp_redes_sociais && (
+        <div style={{ fontSize:12, color:C.dim, marginTop:2 }}>📱 <span style={{ color:C.cream }}>{t.resp_redes_sociais}</span></div>
+      )}
+      {t.cidade && (
+        <div style={{ fontSize:12, color:C.dim, marginTop:2 }}>📍 <span style={{ color:C.cream }}>{t.cidade.nome}{t.cidade.estado ? ` — ${t.cidade.estado}` : ""}</span></div>
+      )}
+      {t.campo && (
+        <div style={{ fontSize:12, color:C.dim, marginTop:2 }}>🏟️ <span style={{ color:C.cream }}>{t.campo.nome}</span></div>
+      )}
+    </div>
+  );
+}
+
 function SeletorTimes({ onSelect }) {
   const [dataRef, setDataRef] = useState(""); // vazio = sem filtro de data
   const [modalCadastro, setModalCadastro] = useState(false);
@@ -104,6 +141,9 @@ function SeletorTimes({ onSelect }) {
       });
     });
   }, [allTimes, dataRef, tipoFiltro]);
+
+  const timesDestaque = useMemo(() => (times||[]).filter(t => t.destaque === true), [times]);
+  const timesNormais  = useMemo(() => (times||[]).filter(t => !t.destaque), [times]);
 
   if (loading) return (
     <div style={{ minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'Oswald','Arial Narrow',Arial,sans-serif" }}>
@@ -194,52 +234,24 @@ function SeletorTimes({ onSelect }) {
           </div>
         </div>
 
+        {timesDestaque.length > 0 && (
+          <div style={{ marginBottom:32 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16 }}>
+              <span style={{ fontSize:13, fontWeight:800, color:C.gold, textTransform:"uppercase", letterSpacing:"0.1em" }}>⭐ Time em destaque</span>
+              <div style={{ flex:1, height:1, background:`linear-gradient(to right, ${C.gold}55, transparent)` }} />
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(260px,1fr))", gap:16 }}>
+              {timesDestaque.map(t => <CardTime key={t.id_time} t={t} onSelect={onSelect} destaque />)}
+            </div>
+          </div>
+        )}
+
+        {timesDestaque.length > 0 && timesNormais.length > 0 && (
+          <div style={{ fontSize:13, fontWeight:800, color:C.dim, textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:16 }}>Todos os times</div>
+        )}
+
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(260px,1fr))", gap:16 }}>
-          {(times||[]).map(t => {
-            return (
-              <div key={t.id_time}
-                onClick={() => onSelect(t)}
-                style={{ background:C.surface, borderRadius:16, padding:"28px 24px", border:`1px solid ${C.border}`, cursor:"pointer", transition:"all 0.2s", textAlign:"center" }}
-                onMouseEnter={e => { e.currentTarget.style.background = C.surf2; e.currentTarget.style.borderColor = C.gold; e.currentTarget.style.transform = "translateY(-2px)"; }}
-                onMouseLeave={e => { e.currentTarget.style.background = C.surface; e.currentTarget.style.borderColor = C.border; e.currentTarget.style.transform = "none"; }}>
-                {t.escudo_url
-                  ? <img src={t.escudo_url} alt={t.nome} style={{ width:72, height:72, borderRadius:"50%", objectFit:"cover", border:`2px solid ${C.gold}`, margin:"0 auto 16px", display:"block" }}/>
-                  : <div style={{ width:72, height:72, borderRadius:"50%", background:C.surf2, border:`2px solid ${C.gold}`, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 16px", fontSize:28 }}>⚽</div>
-                }
-                <div style={{ fontSize:18, fontWeight:800, textTransform:"uppercase", marginBottom:8 }}>{t.nome}</div>
-                {t.data_fundacao && (
-                  <div style={{ fontSize:11, color:C.dim, marginBottom:6 }}>
-                    Fundado em {new Date(t.data_fundacao).getFullYear()}
-                  </div>
-                )}
-                {t.marca_jogos && (
-                  <div style={{ fontSize:12, color:C.dim, marginBottom:4 }}>
-                    📋 <span style={{ color:C.cream }}>Marca jogos:</span> {t.marca_jogos}
-                  </div>
-                )}
-                {t.telefone && (
-                  <div style={{ fontSize:12, color:C.dim }}>
-                    📞 <span style={{ color:C.cream }}>{t.telefone}</span>
-                  </div>
-                )}
-                {t.resp_redes_sociais && (
-                  <div style={{ fontSize:12, color:C.dim, marginTop:2 }}>
-                    📱 <span style={{ color:C.cream }}>{t.resp_redes_sociais}</span>
-                  </div>
-                )}
-                {t.cidade && (
-                  <div style={{ fontSize:12, color:C.dim, marginTop:2 }}>
-                    📍 <span style={{ color:C.cream }}>{t.cidade.nome}{t.cidade.estado ? ` — ${t.cidade.estado}` : ""}</span>
-                  </div>
-                )}
-                {t.campo && (
-                  <div style={{ fontSize:12, color:C.dim, marginTop:2 }}>
-                    🏟️ <span style={{ color:C.cream }}>{t.campo.nome}</span>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {timesNormais.map(t => <CardTime key={t.id_time} t={t} onSelect={onSelect} />)}
         </div>
       </main>
 
@@ -335,14 +347,14 @@ function VisaoGeral({ temporada }) {
           <div style={{ display:"flex", alignItems:"center", gap:20, flexWrap:"wrap" }}>
             {temporada?.escudo_url && (
               <img src={temporada.escudo_url} alt="Escudo"
-                style={{ width:64, height:64, borderRadius:"50%", objectFit:"cover", border:`3px solid ${C.gold}` }}/>
+                style={{ width:88, height:88, borderRadius:"50%", objectFit:"cover", border:`3px solid ${C.gold}` }}/>
             )}
             {uniformes.length > 0 && (
               <div style={{ display:"flex", gap:16, flexWrap:"wrap" }}>
                 {uniformes.map(u => (
                   <div key={u.label} style={{ textAlign:"center" }}>
                     <img src={u.url} alt={u.label}
-                      style={{ width:72, height:72, objectFit:"contain", borderRadius:8, background:C.surf2, border:`1px solid ${C.border}`, display:"block", marginBottom:4 }}/>
+                      style={{ width:110, height:110, objectFit:"contain", borderRadius:8, background:C.surf2, border:`1px solid ${C.border}`, display:"block", marginBottom:6 }}/>
                     <div style={{ fontSize:10, color:C.dim }}>{u.label}</div>
                   </div>
                 ))}
