@@ -300,6 +300,13 @@ function DashboardSuper() {
                     }}>
                     {t.status==="Inativo" ? "Ativar" : "Inativar"}
                   </Btn>
+                  <Btn variant="secondary" style={{ fontSize:11, padding:"5px 12px", color: t.destaque ? C.gold : C.dim }}
+                    onClick={async ()=>{
+                      await api.patch(`time?id_time=eq.${t.id_time}`, { destaque: !t.destaque });
+                      show(t.destaque ? `${t.nome}: destaque removido` : `${t.nome}: marcado como destaque`); reload();
+                    }}>
+                    {t.destaque ? "★ Destaque" : "☆ Destaque"}
+                  </Btn>
                 </td>
               </tr>
             ))}
@@ -1970,7 +1977,7 @@ function CrudTipoTime({ show }) {
 
 export default function SuperApp() {
   const [session, setSession] = useState(SESSION_TOKEN ? {access_token: SESSION_TOKEN} : null);
-  const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.3";
+  const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.4";
 
   if (!session) return <LoginSuper onLogin={setSession}/>;
 
