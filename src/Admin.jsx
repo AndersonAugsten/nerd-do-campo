@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-const APP_VERSION = process.env.REACT_APP_VERSION || "1.12.8";
+const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.0";
 const UFS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 // Distância em km entre dois pontos (lat/long) — fórmula de Haversine
 function distanciaKm(lat1, lon1, lat2, lon2) {
@@ -289,7 +289,7 @@ function FichaPartidaPublica({ partida, onVoltar }) {
     [partida.id_partida]
   );
   const { data: gols, loading: loadGols } = useQuery(
-    () => sb(`gol?select=*,participacao!inner(id_jogador,jogador(nome,apelido,camisa))&participacao.id_partida=eq.${partida.id_partida}&order=periodo.asc,minuto.asc`),
+    () => sb(`gol?select=*,participacao!inner(id_jogador,jogador(nome,apelido,camisa))&participacao.id_partida=eq.${partida.id_partida}&participacao.id_jogador=gt.0&order=periodo.asc,minuto.asc`),
     [partida.id_partida]
   );
 
@@ -1254,8 +1254,16 @@ function FormNovaPartida({ temporada, onSalvo, onCancelar, readOnly = false }) {
     }
     setSaving(true);
     try {
+      // REGRA 10: não permitir 2 partidas na mesma data para o mesmo time (via temporada)
+      const dataDia = form.data; // YYYY-MM-DD
+      const jaTem = await api.get(`partida?id_temporada=eq.${temporada.id_temporada}&data=gte.${dataDia}T00:00:00&data=lte.${dataDia}T23:59:59&cancelada=eq.N&select=id_partida&limit=1`);
+      if (jaTem && jaTem.length > 0) {
+        show("Já existe uma partida cadastrada nesta data para este time.", "error");
+        setSaving(false); return;
+      }
+
       const dataTs = new Date(`${form.data}T${form.horario}:00`).toISOString();
-      await api.post("partida", {
+      const nova = await api.post("partida", {
         id_temporada: temporada.id_temporada,
         id_adversario: form.id_adversario ? Number(form.id_adversario) : null,
         data: dataTs,
@@ -1264,6 +1272,11 @@ function FormNovaPartida({ temporada, onSalvo, onCancelar, readOnly = false }) {
         observacoes: form.observacoes,
         cancelada: "N",
       });
+      // REGRA 12: registrar automaticamente a participação do jogador 0 (adversário) na partida
+      const idPartida = Array.isArray(nova) ? nova[0]?.id_partida : nova?.id_partida;
+      if (idPartida) {
+        try { await api.post("participacao", { id_partida: idPartida, id_jogador: 0, titular: "N" }); } catch {}
+      }
       show(form.id_adversario ? "Partida criada!" : "Partida criada (procurando adversário)!");
       setTimeout(onSalvo, 800);
     } catch (e) { show(e.message, "error"); }
@@ -1309,7 +1322,7 @@ function FichaPartida({ partida: p0, onVoltar, readOnly, idTime }) {
   const { data: posicoes }      = useQuery(() => api.get(`posicao?select=*&order=ordem.asc`));
   const { data: advsFicha } = useQuery(() => idTime ? api.get(`adversario?id_time=eq.${idTime}&select=id_adversario,nome&order=nome.asc`) : Promise.resolve([]), [idTime]);
   // Meu time: tipo, raio padrão e coordenadas da cidade-sede — usado na busca por raio
-  const { data: meuTimeData } = useQuery(() => idTime ? api.get(`time?id_time=eq.${idTime}&select=id_time,id_tipo_time,raio_busca_km,cidade:id_cidade_sede(nome,estado,latitude,longitude)&limit=1`) : Promise.resolve([]), [idTime]);
+  const { data: meuTimeData } = useQuery(() => idTime ? api.get(`time?id_time=eq.${idTime}&select=id_time,id_tipo_time,raio_busca_km,numero_titulares,quantidade_periodos,minutos_padrao_periodo,permite_acrescimos,cidade:id_cidade_sede(nome,estado,latitude,longitude)&limit=1`) : Promise.resolve([]), [idTime]);
   const meuTime = meuTimeData?.[0];
   const meuTipoTime = meuTime?.id_tipo_time;
   const minhaCidade = meuTime?.cidade; // {nome, estado, latitude, longitude}
@@ -1354,6 +1367,14 @@ function FichaPartida({ partida: p0, onVoltar, readOnly, idTime }) {
   const [editGol, setEditGol] = useState(null);
 
   async function salvarPlacar() {
+    // REGRA 9 (parte 2): se a escalação tem MENOS titulares que o parametrizado, confirmar
+    const numeroTitulares = meuTime?.numero_titulares || null;
+    if (numeroTitulares) {
+      const titularesEscalados = (participacoes || []).filter(p => p.titular === "S" && p.id_jogador > 0).length;
+      if (titularesEscalados > 0 && titularesEscalados < numeroTitulares) {
+        if (!confirm(`A escalação tem ${titularesEscalados} titulares, mas o time joga com ${numeroTitulares}. Confirmar mesmo assim? (Ex: faltaram jogadores no dia.)`)) return;
+      }
+    }
     setSavingPlacar(true);
     try {
       const upd = await api.patch(`partida?id_partida=eq.${partida.id_partida}`, {
@@ -1566,15 +1587,17 @@ function FichaPartida({ partida: p0, onVoltar, readOnly, idTime }) {
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {(gols || []).map(g => {
                   const j = g.participacao?.jogador;
-                  const nome = j?.apelido || j?.nome || "?";
+                  const ehAdv = g.participacao?.id_jogador === 0;
+                  const nome = ehAdv ? "Adversário" : (j?.apelido || j?.nome || "?");
                   const assist = g.jogador;
                   return (
                     <div key={g.id_gol} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: C.surf2, borderRadius: 8 }}>
                       <span style={{ fontSize: 18 }}>⚽</span>
                       <div style={{ flex: 1 }}>
                         <span style={{ fontWeight: 700, color: C.gold }}>{nome}</span>
-                        {g.gol_contra === "S" && <Badge label="GC" cor={C.loss} style={{ marginLeft: 6 }} />}
-                        {g.penalti    === "S" && <Badge label="Pen" cor={C.draw} style={{ marginLeft: 6 }} />}
+                        {ehAdv ? <Badge label="Gol contra a nosso favor" cor={C.win} style={{ marginLeft: 6 }} />
+                               : g.gol_contra === "S" && <Badge label="GC" cor={C.loss} style={{ marginLeft: 6 }} />}
+                        {!ehAdv && g.penalti === "S" && <Badge label="Pen" cor={C.draw} style={{ marginLeft: 6 }} />}
                         {assist && <span style={{ color: C.win, fontSize: 13, marginLeft: 8 }}>🅰️ {assist.apelido || assist.nome}</span>}
                       </div>
                       <span style={{ color: C.dim, fontSize: 13 }}>{g.periodo}° · {g.minuto}'</span>
@@ -1753,6 +1776,7 @@ function FichaPartida({ partida: p0, onVoltar, readOnly, idTime }) {
             jogadores={jogadores || []}
             posicoes={posicoes || []}
             participacoes={participacoes || []}
+            meuTime={meuTime}
             onSalvo={() => { setModalEscalacao(false); reloadPart(); show("Jogador adicionado!"); }}
             show={show}
             readOnly={readOnly}
@@ -1765,6 +1789,7 @@ function FichaPartida({ partida: p0, onVoltar, readOnly, idTime }) {
             partida={partida}
             participacoes={participacoes || []}
             jogadores={jogadores || []}
+            meuTime={meuTime}
             onSalvo={() => { setModalGol(false); reloadGols(); show("Gol registrado!"); }}
             show={show}
             readOnly={readOnly}
@@ -1816,13 +1841,16 @@ function NumCell({ pa, field, reload, show }) {
 }
 
 // ── FORM ESCALAÇÃO ────────────────────────────────────────────
-function FormEscalacao({ partida, jogadores, posicoes, participacoes, onSalvo, show, readOnly = false }) {
+function FormEscalacao({ partida, jogadores, posicoes, participacoes, meuTime, onSalvo, show, readOnly = false }) {
   const jaEscalados = new Set((participacoes).map(p => p.id_jogador));
   const disponiveis = jogadores.filter(j => !jaEscalados.has(j.id_jogador));
 
   const [form, setForm] = useState({ id_jogador: "", camisa: "", id_posicao: "", titular: "S", capitao: "N" });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const numeroTitulares = meuTime?.numero_titulares || null;
+  const titularesAtuais = (participacoes || []).filter(p => p.titular === "S" && p.id_jogador > 0).length;
 
   useEffect(() => {
     if (form.id_jogador) {
@@ -1833,6 +1861,25 @@ function FormEscalacao({ partida, jogadores, posicoes, participacoes, onSalvo, s
 
   async function salvar() {
     if (!form.id_jogador) { show("Selecione um jogador.", "error"); return; }
+
+    // REGRA 13: não escalar em partida cancelada
+    if (partida.cancelada === "S") { show("Esta partida está cancelada. Não é possível adicionar jogadores.", "error"); return; }
+
+    // REGRA 2b: camisa não pode repetir na mesma partida
+    if (form.camisa) {
+      const camisaUsada = (participacoes || []).some(p => p.id_jogador > 0 && String(p.camisa) === String(form.camisa));
+      if (camisaUsada) {
+        show(`A camisa ${form.camisa} já está sendo usada por outro jogador nesta partida.`, "error"); return;
+      }
+    }
+
+    // REGRA 9: número de titulares parametrizado
+    if (form.titular === "S" && numeroTitulares) {
+      if (titularesAtuais >= numeroTitulares) {
+        show(`Este time joga com ${numeroTitulares} titulares e a escalação já está completa. Adicione como reserva ou ajuste a escalação.`, "error"); return;
+      }
+    }
+
     setSaving(true);
     try {
       await api.post("participacao", {
@@ -1851,6 +1898,11 @@ function FormEscalacao({ partida, jogadores, posicoes, participacoes, onSalvo, s
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {numeroTitulares && (
+        <div style={{ fontSize: 12, color: titularesAtuais >= numeroTitulares ? C.gold : C.dim, background: C.surf2, borderRadius: 8, padding: "8px 12px" }}>
+          Titulares: {titularesAtuais} de {numeroTitulares}
+        </div>
+      )}
       <Select label="Jogador *" value={form.id_jogador} onChange={e => set("id_jogador", e.target.value)}>
         <option value="">Selecione...</option>
         {disponiveis.map(j => <option key={j.id_jogador} value={j.id_jogador}>#{j.camisa} — {j.apelido || j.nome}</option>)}
@@ -1878,50 +1930,110 @@ function FormEscalacao({ partida, jogadores, posicoes, participacoes, onSalvo, s
 }
 
 // ── FORM GOL ──────────────────────────────────────────────────
-function FormGol({ partida, participacoes, jogadores, onSalvo, show, readOnly = false }) {
+function FormGol({ partida, participacoes, jogadores, meuTime, onSalvo, show, readOnly = false }) {
   const [form, setForm] = useState({ id_participacao: "", periodo: "1", minuto: "", penalti: "N", gol_contra: "N", id_assistente: "" });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
+  // Parâmetros do time (com defaults seguros caso não definidos)
+  const qtdPeriodos   = meuTime?.quantidade_periodos || 2;
+  const minPorPeriodo = meuTime?.minutos_padrao_periodo || 45;
+  const permiteAcres  = (meuTime?.permite_acrescimos || "N") === "S";
+
+  // Garante uma participação do "jogador 0 - Adversário" (global) nesta partida e devolve o id_participacao
+  async function obterParticipacaoAdversario() {
+    const existentes = await api.get(`participacao?id_partida=eq.${partida.id_partida}&id_jogador=eq.0&select=id_participacao&limit=1`);
+    if (existentes?.[0]?.id_participacao) return existentes[0].id_participacao;
+    const nova = await api.post(`participacao`, { id_partida: partida.id_partida, id_jogador: 0, titular: "N" });
+    const id = Array.isArray(nova) ? nova[0]?.id_participacao : nova?.id_participacao;
+    if (id) return id;
+    const rb = await api.get(`participacao?id_partida=eq.${partida.id_partida}&id_jogador=eq.0&select=id_participacao&limit=1`);
+    return rb?.[0]?.id_participacao;
+  }
+
   async function salvar() {
-    if (!form.id_participacao || !form.minuto) { show("Selecione o jogador e o minuto.", "error"); return; }
+    const ehAdversario = form.id_participacao === "ADVERSARIO";
+    if ((!form.id_participacao) || !form.minuto) { show("Selecione quem fez o gol e o minuto.", "error"); return; }
+
+    // REGRA 13: não registrar em partida cancelada
+    if (partida.cancelada === "S") { show("Esta partida está cancelada. Não é possível registrar gols.", "error"); return; }
+
+    const periodo = Number(form.periodo);
+    const minuto  = Number(form.minuto);
+
+    // REGRA 6: período não pode passar do número de períodos do time
+    if (periodo > qtdPeriodos) {
+      show(`Este time joga com ${qtdPeriodos} período(s). O período ${periodo} é inválido.`, "error"); return;
+    }
+    if (periodo < 1) { show("Período inválido.", "error"); return; }
+
+    // REGRA 4: acréscimos — gol após o tempo padrão do período
+    if (minuto > minPorPeriodo) {
+      if (!permiteAcres) {
+        show(`Este time não permite acréscimos. O minuto não pode passar de ${minPorPeriodo} (tempo padrão do período).`, "error"); return;
+      } else {
+        if (!confirm(`O minuto ${minuto} é maior que o tempo padrão do período (${minPorPeriodo} min). Registrar como acréscimo?`)) return;
+      }
+    }
+
     setSaving(true);
     try {
+      let idParticipacao;
+      if (ehAdversario) {
+        idParticipacao = await obterParticipacaoAdversario();
+        if (!idParticipacao) throw new Error("Não foi possível registrar o gol do adversário.");
+      } else {
+        idParticipacao = Number(form.id_participacao);
+      }
       await api.post("gol", {
-        id_participacao: Number(form.id_participacao),
-        periodo: Number(form.periodo),
-        minuto: Number(form.minuto),
-        penalti: form.penalti,
-        gol_contra: form.gol_contra,
-        id_assistente: form.id_assistente ? Number(form.id_assistente) : null,
+        id_participacao: idParticipacao,
+        periodo: periodo,
+        minuto: minuto,
+        penalti: ehAdversario ? "N" : form.penalti,
+        gol_contra: ehAdversario ? "S" : form.gol_contra,
+        id_assistente: (!ehAdversario && form.id_assistente) ? Number(form.id_assistente) : null,
       });
       onSalvo();
     } catch (e) { show(e.message, "error"); }
     finally { setSaving(false); }
   }
 
+  const ehAdversario = form.id_participacao === "ADVERSARIO";
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <Select label="Jogador que fez o gol *" value={form.id_participacao} onChange={e => set("id_participacao", e.target.value)}>
+      <Select label="Quem fez o gol *" value={form.id_participacao} onChange={e => set("id_participacao", e.target.value)}>
         <option value="">Selecione...</option>
         {participacoes.map(pa => <option key={pa.id_participacao} value={pa.id_participacao}>#{pa.camisa} — {pa.jogador?.apelido || pa.jogador?.nome}</option>)}
+        <option value="ADVERSARIO">⚽ Gol contra do adversário (a nosso favor)</option>
       </Select>
+      {ehAdversario && (
+        <div style={{ fontSize: 12, color: C.dim, background: C.surf2, borderRadius: 8, padding: "8px 12px" }}>
+          Este gol conta no placar a favor do seu time e não é atribuído a nenhum jogador do seu elenco. Informe apenas o período e o minuto.
+        </div>
+      )}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <Input label="Período *" type="number" min="1" value={form.periodo} onChange={e => set("periodo", e.target.value)} />
-        <Input label="Minuto *" type="number" min="1" max="90" value={form.minuto} onChange={e => set("minuto", e.target.value)} />
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <Select label="Pênalti?" value={form.penalti} onChange={e => set("penalti", e.target.value)}>
-          <option value="N">Não</option><option value="S">Sim</option>
+        <Select label="Período *" value={form.periodo} onChange={e => set("periodo", e.target.value)}>
+          {Array.from({ length: qtdPeriodos }, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}º período</option>)}
         </Select>
-        <Select label="Gol Contra?" value={form.gol_contra} onChange={e => set("gol_contra", e.target.value)}>
-          <option value="N">Não</option><option value="S">Sim</option>
-        </Select>
+        <Input label={`Minuto * (padrão até ${minPorPeriodo})`} type="number" min="1" value={form.minuto} onChange={e => set("minuto", e.target.value)} />
       </div>
-      <Select label="Assistência (opcional)" value={form.id_assistente} onChange={e => set("id_assistente", e.target.value)}>
-        <option value="">Sem assistência</option>
-        {jogadores.map(j => <option key={j.id_jogador} value={j.id_jogador}>#{j.camisa} — {j.apelido || j.nome}</option>)}
-      </Select>
+      {!ehAdversario && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Select label="Pênalti?" value={form.penalti} onChange={e => set("penalti", e.target.value)}>
+            <option value="N">Não</option><option value="S">Sim</option>
+          </Select>
+          <Select label="Gol Contra?" value={form.gol_contra} onChange={e => set("gol_contra", e.target.value)}>
+            <option value="N">Não</option><option value="S">Sim</option>
+          </Select>
+        </div>
+      )}
+      {!ehAdversario && (
+        <Select label="Assistência (opcional)" value={form.id_assistente} onChange={e => set("id_assistente", e.target.value)}>
+          <option value="">Sem assistência</option>
+          {jogadores.map(j => <option key={j.id_jogador} value={j.id_jogador}>#{j.camisa} — {j.apelido || j.nome}</option>)}
+        </Select>
+      )}
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
         <Btn onClick={salvar} disabled={saving || readOnly}>{saving ? "Salvando..." : readOnly ? "Somente Leitura" : "Registrar Gol"}</Btn>
       </div>
@@ -4306,7 +4418,7 @@ function CrudTemporadas({ idTime, show, readOnly }) {
 
   function abrirNovo() {
     const t = times?.[0];
-    setForm({ nome:"", id_time: t ? String(t.id_time) : "", data_inicio:"", data_fim:"", publico: true, tecnico: t?.tecnico||"", presidente: t?.presidente||"", vice_presidente: t?.vice_presidente||"", financeiro: t?.financeiro||"", vice_financeiro: t?.vice_financeiro||"", marca_jogos: t?.marca_jogos||"", resp_redes_sociais: t?.resp_redes_sociais||"", resp_eventos: t?.resp_eventos||"", observacoes:"" });
+    setForm({ nome:"", id_time: t ? String(t.id_time) : "", data_inicio:"", data_fim:"", publico: true, escudo_url: t?.escudo_url||null, tecnico: t?.tecnico||"", presidente: t?.presidente||"", vice_presidente: t?.vice_presidente||"", financeiro: t?.financeiro||"", vice_financeiro: t?.vice_financeiro||"", marca_jogos: t?.marca_jogos||"", resp_redes_sociais: t?.resp_redes_sociais||"", resp_eventos: t?.resp_eventos||"", observacoes:"" });
     setModal("novo");
   }
   function abrirEditar(t) { setForm({ ...t, publico: t.publico !== false, uniforme_1_url: t.uniforme_1_url||null, uniforme_2_url: t.uniforme_2_url||null, uniforme_3_url: t.uniforme_3_url||null, escudo_url: t.escudo_url||null, id_time: t.id_time ? String(t.id_time) : "" }); setModal(t); }

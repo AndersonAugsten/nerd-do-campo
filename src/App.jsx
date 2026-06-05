@@ -408,7 +408,7 @@ function FichaPartidaPublica({ partida, onVoltar }) {
     [partida.id_partida]
   );
   const { data: gols, loading: loadGols } = useQuery(
-    () => sb(`gol?select=*,participacao!inner(id_jogador,jogador(nome,apelido,camisa))&participacao.id_partida=eq.${partida.id_partida}&order=periodo.asc,minuto.asc`),
+    () => sb(`gol?select=*,participacao!inner(id_jogador,jogador(nome,apelido,camisa))&participacao.id_partida=eq.${partida.id_partida}&participacao.id_jogador=gt.0&order=periodo.asc,minuto.asc`),
     [partida.id_partida]
   );
 
