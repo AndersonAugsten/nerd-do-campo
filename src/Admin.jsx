@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-const APP_VERSION = process.env.REACT_APP_VERSION || "1.12.5";
+const APP_VERSION = process.env.REACT_APP_VERSION || "1.12.6";
 const UFS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 // Distância em km entre dois pontos (lat/long) — fórmula de Haversine
 function distanciaKm(lat1, lon1, lat2, lon2) {
@@ -2401,53 +2401,76 @@ function CrudMensalidades({ idTime, show, readOnly }) {
           ))}
         </div>
 
-        {/* Tabela de jogadores */}
-        <Card style={{ padding:0, overflow:"hidden" }}>
-          <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}><table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
-            <thead><tr style={{ background:C.surf2 }}>
-              {["#","Jogador","Status","Esperado","Pago","Saldo","Ações"].map(h => (
-                <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontSize:11, color:C.dim, textTransform:"uppercase", fontWeight:700 }}>{h}</th>
-              ))}
-            </tr></thead>
-            <tbody>
-              {filtrados.map((j, i) => {
-                const cfg = STATUS_CFG[j.status] || STATUS_CFG.nao_pago;
-                const esperado = j.pag?.valor_esperado ?? (time?.valor_mensalidade||0);
-                const pago     = j.pag?.valor_pago || 0;
-                const saldo    = esperado - pago;
-                return (
-                  <tr key={j.id_jogador} style={{ background:i%2===0?C.surface:C.bg, transition:"background 0.1s" }}>
-                    <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{j.camisa||"—"}</td>
-                    <td style={{ padding:"11px 14px", fontWeight:700 }}>
-                      {j.apelido ? <>{j.apelido} <span style={{ color:C.dim, fontWeight:400, fontSize:11 }}>({j.nome})</span></> : j.nome}
-                    </td>
-                    <td style={{ padding:"11px 14px" }}>
-                      <span style={{ background:cfg.cor+"22", color:cfg.cor, border:`1px solid ${cfg.cor}44`, borderRadius:6, padding:"2px 10px", fontSize:11, fontWeight:700 }}>
-                        {cfg.icon} {cfg.label}
-                      </span>
-                    </td>
-                    <td style={{ padding:"11px 14px", color:C.dim }}>{j.status==="isento" ? "—" : fmtMoeda(esperado)}</td>
-                    <td style={{ padding:"11px 14px", color:C.win, fontWeight:700 }}>{pago>0 ? fmtMoeda(pago) : "—"}</td>
-                    <td style={{ padding:"11px 14px", color: saldo>0 ? C.loss : C.win, fontWeight:700 }}>
-                      {j.status==="isento" ? "—" : saldo>0 ? `-${fmtMoeda(saldo)}` : "✓"}
-                    </td>
-                    <td style={{ padding:"11px 14px", display:"flex", gap:6 }}>
-                      {!readOnly && j.status !== "pago" && j.status !== "isento" && (
-                        <Btn style={{ fontSize:11, padding:"4px 10px", background:C.win, color:"white" }}
-                          onClick={() => marcarPago(j)}>✅ Pago</Btn>
-                      )}
-                      <Btn variant="secondary" style={{ fontSize:11, padding:"4px 10px" }}
-                        onClick={() => !readOnly && abrirModal(j)}
-                        disabled={readOnly}>
-                        {readOnly ? "👁️ Ver" : "Detalhes"}
-                      </Btn>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table></div>
-        </Card>
+        {/* Tabela de jogadores — separada em Pendentes e Quitados */}
+        {(() => {
+          const Linha = ({ j, i }) => {
+            const cfg = STATUS_CFG[j.status] || STATUS_CFG.nao_pago;
+            const esperado = j.pag?.valor_esperado ?? (time?.valor_mensalidade||0);
+            const pago     = j.pag?.valor_pago || 0;
+            const saldo    = esperado - pago;
+            return (
+              <tr key={j.id_jogador} style={{ background:i%2===0?C.surface:C.bg, transition:"background 0.1s" }}>
+                <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{j.camisa||"—"}</td>
+                <td style={{ padding:"11px 14px", fontWeight:700 }}>
+                  {j.apelido ? <>{j.apelido} <span style={{ color:C.dim, fontWeight:400, fontSize:11 }}>({j.nome})</span></> : j.nome}
+                </td>
+                <td style={{ padding:"11px 14px" }}>
+                  <span style={{ background:cfg.cor+"22", color:cfg.cor, border:`1px solid ${cfg.cor}44`, borderRadius:6, padding:"2px 10px", fontSize:11, fontWeight:700 }}>
+                    {cfg.icon} {cfg.label}
+                  </span>
+                </td>
+                <td style={{ padding:"11px 14px", color:C.dim }}>{j.status==="isento" ? "—" : fmtMoeda(esperado)}</td>
+                <td style={{ padding:"11px 14px", color:C.win, fontWeight:700 }}>{pago>0 ? fmtMoeda(pago) : "—"}</td>
+                <td style={{ padding:"11px 14px", color: saldo>0 ? C.loss : C.win, fontWeight:700 }}>
+                  {j.status==="isento" ? "—" : saldo>0 ? `-${fmtMoeda(saldo)}` : "✓"}
+                </td>
+                <td style={{ padding:"11px 14px", display:"flex", gap:6 }}>
+                  {!readOnly && j.status !== "pago" && j.status !== "isento" && (
+                    <Btn style={{ fontSize:11, padding:"4px 10px", background:C.win, color:"white" }}
+                      onClick={() => marcarPago(j)}>✅ Pago</Btn>
+                  )}
+                  <Btn variant="secondary" style={{ fontSize:11, padding:"4px 10px" }}
+                    onClick={() => !readOnly && abrirModal(j)}
+                    disabled={readOnly}>
+                    {readOnly ? "👁️ Ver" : "Detalhes"}
+                  </Btn>
+                </td>
+              </tr>
+            );
+          };
+          const Tabela = ({ titulo, cor, dados }) => (
+            <div>
+              <div style={{ fontSize:11, color:cor, textTransform:"uppercase", letterSpacing:"0.1em", fontWeight:700, marginBottom:10, borderLeft:`3px solid ${cor}`, paddingLeft:10 }}>{titulo} ({dados.length})</div>
+              <Card style={{ padding:0, overflow:"hidden" }}>
+                <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}><table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+                  <thead><tr style={{ background:C.surf2 }}>
+                    {["#","Jogador","Status","Esperado","Pago","Saldo","Ações"].map(h => (
+                      <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontSize:11, color:C.dim, textTransform:"uppercase", fontWeight:700 }}>{h}</th>
+                    ))}
+                  </tr></thead>
+                  <tbody>
+                    {dados.length === 0
+                      ? <tr><td colSpan={7} style={{ padding:"18px 14px", textAlign:"center", color:C.dim, fontSize:13 }}>Nenhum jogador nesta situação.</td></tr>
+                      : dados.map((j, i) => <Linha key={j.id_jogador} j={j} i={i} />)}
+                  </tbody>
+                </table></div>
+              </Card>
+            </div>
+          );
+          // Pendentes = não pagos + parciais (ainda devem). Quitados = pagos + isentos.
+          const pendentes = filtrados.filter(j => j.status === "nao_pago" || j.status === "parcial");
+          const quitados  = filtrados.filter(j => j.status === "pago" || j.status === "isento");
+          // Se o usuário filtrou por um status específico, mostra uma tabela só (respeita o filtro)
+          if (filtroStatus !== "todos") {
+            return <Tabela titulo="Jogadores" cor={C.gold} dados={filtrados} />;
+          }
+          return (
+            <div style={{ display:"flex", flexDirection:"column", gap:24 }}>
+              <Tabela titulo="🔴 Pendentes (não pagos e parciais)" cor={C.loss} dados={pendentes} />
+              <Tabela titulo="🟢 Pagos e isentos" cor={C.win} dados={quitados} />
+            </div>
+          );
+        })()}
       </>)}
 
       {/* ── ABA INADIMPLENTES ── */}
