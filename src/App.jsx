@@ -371,7 +371,7 @@ function VisaoGeral({ temporada }) {
           <SecTitle accent>Último Jogo</SecTitle>
           {ultima ? (<>
             <div style={{ fontSize:13, color:C.dim, marginBottom:4 }}>{fmtData(ultima.data)} · {ultima.em_casa==="S"?"Em Casa":"Fora"}</div>
-            <div style={{ fontSize:20, fontWeight:700, marginBottom:8 }}>{ultima.adversario?.nome}</div>
+            <div style={{ fontSize:20, fontWeight:700, marginBottom:8 }}>{ultima.adversario?.nome || "A definir"}</div>
             <div style={{ display:"flex", alignItems:"center", gap:12 }}>
               <span style={{ fontSize:32, fontWeight:800, color:C.gold }}>{ultima.gols_marcados} × {ultima.gols_sofridos}</span>
               <Badge {...resultado(ultima)}/>
@@ -427,7 +427,7 @@ function FichaPartidaPublica({ partida, onVoltar }) {
         <div style={{ fontSize:12, color:C.dim, marginBottom:4 }}>
           {fmtData(partida.data)} · {fmtHora(partida.data)} · {partida.em_casa==="S"?"🏠 Em Casa":"✈️ Fora"}
         </div>
-        <div style={{ fontSize:24, fontWeight:800, textTransform:"uppercase", marginBottom:12 }}>{partida.adversario?.nome}</div>
+        <div style={{ fontSize:24, fontWeight:800, textTransform:"uppercase", marginBottom:12 }}>{partida.adversario?.nome || "🔍 Procurando adversário"}</div>
         <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:8 }}>
           <span style={{ fontSize:42, fontWeight:800, color:C.gold }}>{partida.gols_marcados} × {partida.gols_sofridos}</span>
           <Badge {...res}/>
@@ -575,12 +575,18 @@ function Calendario({ temporada }) {
 // ── ELENCO ────────────────────────────────────────────────────
 function Elenco({ time, temporada }) {
   const { data: jogadores, loading } = useQuery(
-    () => sb(`jogador?id_jogador=gt.0&id_time=eq.${time.id_time}&select=*,posicao(nome)&order=camisa.asc`),
+    () => sb(`jogador?id_jogador=gt.0&id_time=eq.${time.id_time}&select=*,posicao(nome,ordem)&order=camisa.asc`),
     [time.id_time]
   );
   if (loading) return <Spinner />;
   const ativos = (jogadores||[]).filter(j => !j.data_fim);
-  const grupos = [...new Set(ativos.map(j => j.posicao?.nome).filter(Boolean))];
+  // Agrupa por posição, ordenando os grupos pela coluna 'ordem' da posição
+  const grupos = [...new Set(ativos.map(j => j.posicao?.nome).filter(Boolean))]
+    .sort((a, b) => {
+      const ordemA = ativos.find(j => j.posicao?.nome === a)?.posicao?.ordem ?? 999;
+      const ordemB = ativos.find(j => j.posicao?.nome === b)?.posicao?.ordem ?? 999;
+      return ordemA - ordemB;
+    });
   const uniformes = [
     { url: temporada?.uniforme_1_url, label:"Uniforme 1" },
     { url: temporada?.uniforme_2_url, label:"Uniforme 2" },
@@ -629,7 +635,12 @@ function Elenco({ time, temporada }) {
         </div>
       </Card>
       {grupos.map(grupo => {
-        const jogs = ativos.filter(j => j.posicao?.nome === grupo);
+        const jogs = ativos.filter(j => j.posicao?.nome === grupo)
+          .sort((a, b) => {
+            const na = Number(a.camisa), nb = Number(b.camisa);
+            if (!isNaN(na) && !isNaN(nb)) return na - nb;
+            return String(a.camisa||"").localeCompare(String(b.camisa||""));
+          });
         return (
           <div key={grupo}>
             <div style={{ fontSize:11, color:C.gold, textTransform:"uppercase", letterSpacing:"0.12em", fontWeight:700, marginBottom:10, borderLeft:`3px solid ${C.gold}`, paddingLeft:10 }}>{grupo}</div>
@@ -735,7 +746,7 @@ function Gols({ temporada }) {
           <option value="todos">Todos os jogos ({(gols||[]).length} gols)</option>
           {(partidas||[]).map(p => {
             const qtd = (gols||[]).filter(g=>g.id_partida===p.id_partida).length;
-            return <option key={p.id_partida} value={p.id_partida}>{fmtData(p.data)} — {p.adversario?.nome} ({qtd} gol{qtd!==1?"s":""})</option>;
+            return <option key={p.id_partida} value={p.id_partida}>{fmtData(p.data)} — {p.adversario?.nome || "A definir"} ({qtd} gol{qtd!==1?"s":""})</option>;
           })}
         </select>
       </div>

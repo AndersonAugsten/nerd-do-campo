@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-const APP_VERSION = process.env.REACT_APP_VERSION || "1.9.0";
+const APP_VERSION = process.env.REACT_APP_VERSION || "1.9.6";
 
 // ── Supabase ──────────────────────────────────────────────────
 const URL  = process.env.REACT_APP_SUPABASE_URL || "https://nxztffulmvohduvudbhg.supabase.co";
@@ -244,7 +244,7 @@ function VisaoGeral({ temporada }) {
           <div style={{ fontSize:11, color:C.gold, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700, marginBottom:14, borderLeft:`3px solid ${C.gold}`, paddingLeft:10 }}>Último Jogo</div>
           {ultima ? (<>
             <div style={{ fontSize:13, color:C.dim, marginBottom:4 }}>{fmtDataA(ultima.data)} · {ultima.em_casa==="S"?"Em Casa":"Fora"}</div>
-            <div style={{ fontSize:20, fontWeight:700, marginBottom:8 }}>{ultima.adversario?.nome}</div>
+            <div style={{ fontSize:20, fontWeight:700, marginBottom:8 }}>{ultima.adversario?.nome || "A definir"}</div>
             <div style={{ display:"flex", alignItems:"center", gap:12 }}>
               <span style={{ fontSize:32, fontWeight:800, color:C.gold }}>{ultima.gols_marcados} × {ultima.gols_sofridos}</span>
               <BadgeA {...resultadoA(ultima)}/>
@@ -298,7 +298,7 @@ function FichaPartidaPublica({ partida, onVoltar }) {
         <div style={{ fontSize:12, color:C.dim, marginBottom:4 }}>
           {fmtDataA(partida.data)} · {fmtHoraA(partida.data)} · {partida.em_casa==="S"?"🏠 Em Casa":"✈️ Fora"}
         </div>
-        <div style={{ fontSize:24, fontWeight:800, textTransform:"uppercase", marginBottom:12 }}>{partida.adversario?.nome}</div>
+        <div style={{ fontSize:24, fontWeight:800, textTransform:"uppercase", marginBottom:12 }}>{partida.adversario?.nome || "🔍 Procurando adversário"}</div>
         <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:8 }}>
           <span style={{ fontSize:42, fontWeight:800, color:C.gold }}>{partida.gols_marcados} × {partida.gols_sofridos}</span>
           <BadgeA {...res}/>
@@ -445,12 +445,17 @@ function Calendario({ temporada }) {
 
 function Elenco({ time, temporada }) {
   const { data: jogadores, loading } = useQuery(
-    () => sb(`jogador?id_jogador=gt.0&id_time=eq.${time.id_time}&select=*,posicao(nome)&order=camisa.asc`),
+    () => sb(`jogador?id_jogador=gt.0&id_time=eq.${time.id_time}&select=*,posicao(nome,ordem)&order=camisa.asc`),
     [time.id_time]
   );
   if (loading) return <Spinner />;
   const ativos = (jogadores||[]).filter(j => !j.data_fim);
-  const grupos = [...new Set(ativos.map(j => j.posicao?.nome).filter(Boolean))];
+  const grupos = [...new Set(ativos.map(j => j.posicao?.nome).filter(Boolean))]
+    .sort((a, b) => {
+      const ordemA = ativos.find(j => j.posicao?.nome === a)?.posicao?.ordem ?? 999;
+      const ordemB = ativos.find(j => j.posicao?.nome === b)?.posicao?.ordem ?? 999;
+      return ordemA - ordemB;
+    });
   const uniformes = [
     { url: temporada?.uniforme_1_url, label:"Uniforme 1" },
     { url: temporada?.uniforme_2_url, label:"Uniforme 2" },
@@ -499,7 +504,12 @@ function Elenco({ time, temporada }) {
         </div>
       </Card>
       {grupos.map(grupo => {
-        const jogs = ativos.filter(j => j.posicao?.nome === grupo);
+        const jogs = ativos.filter(j => j.posicao?.nome === grupo)
+          .sort((a, b) => {
+            const na = Number(a.camisa), nb = Number(b.camisa);
+            if (!isNaN(na) && !isNaN(nb)) return na - nb;
+            return String(a.camisa||"").localeCompare(String(b.camisa||""));
+          });
         return (
           <div key={grupo}>
             <div style={{ fontSize:11, color:C.gold, textTransform:"uppercase", letterSpacing:"0.12em", fontWeight:700, marginBottom:10, borderLeft:`3px solid ${C.gold}`, paddingLeft:10 }}>{grupo}</div>
@@ -603,7 +613,7 @@ function Gols({ temporada }) {
           <option value="todos">Todos os jogos ({(gols||[]).length} gols)</option>
           {(partidas||[]).map(p => {
             const qtd = (gols||[]).filter(g=>g.id_partida===p.id_partida).length;
-            return <option key={p.id_partida} value={p.id_partida}>{fmtDataA(p.data)} — {p.adversario?.nome} ({qtd} gol{qtd!==1?"s":""})</option>;
+            return <option key={p.id_partida} value={p.id_partida}>{fmtDataA(p.data)} — {p.adversario?.nome || "A definir"} ({qtd} gol{qtd!==1?"s":""})</option>;
           })}
         </select>
       </div>
@@ -840,8 +850,21 @@ function sortData(dados, sortKey, asc) {
       for (const p of parts) v = v?.[p];
       return v ?? "";
     }
-    const va = String(getVal(a, sortKey)).toLowerCase();
-    const vb = String(getVal(b, sortKey)).toLowerCase();
+    const rawA = getVal(a, sortKey);
+    const rawB = getVal(b, sortKey);
+    // Comparação numérica quando ambos são números (ex: camisa, ordem)
+    const numA = Number(rawA), numB = Number(rawB);
+    const ambosNum = rawA !== "" && rawB !== "" && !isNaN(numA) && !isNaN(numB);
+    if (ambosNum) {
+      if (numA < numB) return asc ? -1 : 1;
+      if (numA > numB) return asc ? 1 : -1;
+      return 0;
+    }
+    // Vazios sempre por último
+    if (rawA === "" && rawB !== "") return 1;
+    if (rawA !== "" && rawB === "") return -1;
+    const va = String(rawA).toLowerCase();
+    const vb = String(rawB).toLowerCase();
     if (va < vb) return asc ? -1 : 1;
     if (va > vb) return asc ? 1 : -1;
     return 0;
@@ -1058,11 +1081,11 @@ function ListaPartidas({ temporada, onSelect, onNova, adversarios, campos, show:
         const gs = row["gols_sofridos"] !== "" ? Number(row["gols_sofridos"]) : null;
         const body = {
           id_temporada: temporada.id_temporada,
-          id_adversario: adv.id_adversario,
+          id_adversario: adv?.id_adversario || null,
           data: dataISO,
           em_casa: String(row.em_casa||"NAO").toUpperCase()==="SIM"?"S":"N",
           cancelada: String(row.cancelada||"NAO").toUpperCase()==="SIM"?"S":"N",
-          id_campo: campo?.id_campo || adv.id_campo || null,
+          id_campo: campo?.id_campo || adv?.id_campo || null,
           gols_marcados: gm,
           gols_sofridos: gs,
           observacoes: row.observacoes||null,
@@ -1102,7 +1125,7 @@ function ListaPartidas({ temporada, onSelect, onNova, adversarios, campos, show:
               })),
               [
                 { key:"id_partida",    label:"id",            width:8,  descricao:"NÃO altere. Vazio = nova partida." },
-                { key:"adversario",    label:"adversario",    width:25, descricao:"Nome exato do adversário cadastrado. OBRIGATÓRIO." },
+                { key:"adversario",    label:"adversario",    width:25, descricao:"Nome exato do adversário cadastrado. Deixe vazio se ainda está procurando." },
                 { key:"data",          label:"data",          width:14, descricao:"Data no formato DD/MM/AAAA. OBRIGATÓRIO." },
                 { key:"hora",          label:"hora",          width:8,  descricao:"Hora no formato HH:MM. OBRIGATÓRIO." },
                 { key:"em_casa",       label:"em_casa",       width:8,  descricao:"SIM ou NAO." },
@@ -1113,7 +1136,7 @@ function ListaPartidas({ temporada, onSelect, onNova, adversarios, campos, show:
                 { key:"observacoes",   label:"observacoes",   width:40, descricao:"Observações da partida." },
               ],
               "partidas",
-              ["- id preenchido = atualiza partida existente", "- id vazio = cria nova partida", "- Adversário e Campo devem estar cadastrados", "- Data: DD/MM/AAAA | Hora: HH:MM"]
+              ["- id preenchido = atualiza partida existente", "- id vazio = cria nova partida", "- Campo deve estar cadastrado; Adversário é opcional (vazio = procurando jogo)", "- Data: DD/MM/AAAA | Hora: HH:MM"]
             )}
             onImportar={async (file) => {
               setLoadingImportPartida(true);
@@ -1123,9 +1146,11 @@ function ListaPartidas({ temporada, onSelect, onNova, adversarios, campos, show:
                 rows.forEach((row, i) => {
                   const linha = i + 2;
                   const advNome = String(row["adversario"]||"").trim();
-                  if (!advNome) { erros.push({ linha, mensagem: "Campo 'adversario' é obrigatório." }); return; }
-                  const advOk = (adversarios||[]).find(a => a.nome.toUpperCase() === advNome.toUpperCase());
-                  if (!advOk) { erros.push({ linha, mensagem: `Adversário '${advNome}' não encontrado.` }); return; }
+                  let advOk = null;
+                  if (advNome) {
+                    advOk = (adversarios||[]).find(a => a.nome.toUpperCase() === advNome.toUpperCase());
+                    if (!advOk) { erros.push({ linha, mensagem: `Adversário '${advNome}' não encontrado.` }); return; }
+                  }
                   if (!String(row["data"]||"").trim()) { erros.push({ linha, mensagem: "Campo 'data' é obrigatório." }); return; }
                   if (!String(row["hora"]||"").trim()) { erros.push({ linha, mensagem: "Campo 'hora' é obrigatório." }); return; }
                   const gm = row["gols_marcados"] !== "" ? Number(row["gols_marcados"]) : null;
@@ -1206,20 +1231,20 @@ function FormNovaPartida({ temporada, onSalvo, onCancelar, readOnly = false }) {
   }, [form.em_casa, form.id_adversario, time, adversarios]);
 
   async function salvar() {
-    if (!form.data || !form.id_adversario || !form.id_campo) { show("Preencha todos os campos obrigatórios.", "error"); return; }
+    if (!form.data || !form.id_campo) { show("Preencha a data e o campo.", "error"); return; }
     setSaving(true);
     try {
       const dataTs = new Date(`${form.data}T${form.horario}:00`).toISOString();
       await api.post("partida", {
         id_temporada: temporada.id_temporada,
-        id_adversario: Number(form.id_adversario),
+        id_adversario: form.id_adversario ? Number(form.id_adversario) : null,
         data: dataTs,
         em_casa: form.em_casa,
         id_campo: Number(form.id_campo),
         observacoes: form.observacoes,
         cancelada: "N",
       });
-      show("Partida criada!");
+      show(form.id_adversario ? "Partida criada!" : "Partida criada (procurando adversário)!");
       setTimeout(onSalvo, 800);
     } catch (e) { show(e.message, "error"); }
     finally { setSaving(false); }
@@ -1234,8 +1259,8 @@ function FormNovaPartida({ temporada, onSalvo, onCancelar, readOnly = false }) {
         <Input label="Data *" type="date" value={form.data} onChange={e => set("data", e.target.value)} />
         <Input label="Horário *" type="time" value={form.horario} onChange={e => set("horario", e.target.value)} />
       </div>
-      <Select label="Adversário *" value={form.id_adversario} onChange={e => set("id_adversario", e.target.value)}>
-        <option value="">Selecione...</option>
+      <Select label="Adversário (deixe em branco se ainda está procurando)" value={form.id_adversario} onChange={e => set("id_adversario", e.target.value)}>
+        <option value="">🔍 Procurando adversário</option>
         {(adversarios || []).map(a => <option key={a.id_adversario} value={a.id_adversario}>{a.nome}</option>)}
       </Select>
       <Select label="Local" value={form.em_casa} onChange={e => set("em_casa", e.target.value)}>
@@ -1262,6 +1287,23 @@ function FichaPartida({ partida: p0, onVoltar, readOnly, idTime }) {
 
   const { data: jogadores }     = useQuery(() => idTime ? api.get(`jogador?id_jogador=gt.0&id_time=eq.${idTime}&select=*,posicao(nome)&order=camisa.asc`) : Promise.resolve([]), [idTime]);
   const { data: posicoes }      = useQuery(() => api.get(`posicao?select=*&order=ordem.asc`));
+  const { data: advsFicha } = useQuery(() => idTime ? api.get(`adversario?id_time=eq.${idTime}&select=id_adversario,nome&order=nome.asc`) : Promise.resolve([]), [idTime]);
+  // Meu time (para saber o tipo) — usado na busca de adversários disponíveis
+  const { data: meuTimeData } = useQuery(() => idTime ? api.get(`time?id_time=eq.${idTime}&select=id_time,id_tipo_time&limit=1`) : Promise.resolve([]), [idTime]);
+  const meuTipoTime = meuTimeData?.[0]?.id_tipo_time;
+  // A partida está "procurando" se não tem adversário definido (usa estado atual, não o inicial)
+  const semAdversario = !(partida.id_adversario);
+  // Buscar times disponíveis na mesma data (partida em branco, público, mesmo tipo)
+  const dataPartida = partida.data ? partida.data.split("T")[0] : null;
+  const { data: disponiveis, loading: loadingDisp } = useQuery(
+    () => (semAdversario && dataPartida)
+      ? api.get(`partida?id_adversario=is.null&cancelada=eq.N&data=gte.${dataPartida}T00:00:00&data=lte.${dataPartida}T23:59:59&select=id_partida,data,temporada(id_time,time(id_time,nome,escudo_url,telefone,resp_redes_sociais,marca_jogos,data_fundacao,publico,id_tipo_time,cidade(nome,estado),campo(nome)))`)
+      : Promise.resolve([]),
+    [semAdversario, dataPartida]
+  );
+  const [modalAdv, setModalAdv] = useState(false);
+  const [advSel, setAdvSel] = useState("");
+  const [savingAdv, setSavingAdv] = useState(false);
   const { data: participacoes, reload: reloadPart } = useQuery(
     () => api.get(`participacao?id_partida=eq.${partida.id_partida}&id_jogador=gt.0&select=*,jogador(nome,apelido,camisa),posicao(nome)&order=camisa.asc`),
     [partida.id_partida]
@@ -1306,6 +1348,23 @@ function FichaPartida({ partida: p0, onVoltar, readOnly, idTime }) {
       setPartida(u => ({ ...u, cancelada: "S" }));
       show("Partida cancelada.");
     } catch (e) { show(e.message, "error"); }
+  }
+
+  async function definirAdversario() {
+    const novoId = advSel ? Number(advSel) : null;
+    // Aviso se for remover adversário de uma partida que já tem placar lançado
+    if (!novoId && (partida.gols_marcados !== null && partida.gols_marcados !== undefined)) {
+      if (!confirm("Esta partida já tem placar lançado. Remover o adversário pode deixar o resultado inconsistente. Deseja continuar?")) return;
+    }
+    setSavingAdv(true);
+    try {
+      await api.patch(`partida?id_partida=eq.${partida.id_partida}`, { id_adversario: novoId });
+      const adv = (advsFicha || []).find(a => String(a.id_adversario) === String(advSel));
+      setPartida(u => ({ ...u, id_adversario: novoId, adversario: novoId ? (adv ? { nome: adv.nome } : u.adversario) : null }));
+      show(novoId ? "Adversário definido!" : "Adversário removido — partida procurando jogo.");
+      setModalAdv(false); setAdvSel("");
+    } catch (e) { show(e.message, "error"); }
+    finally { setSavingAdv(false); }
   }
 
   async function removerGol(id_gol) {
@@ -1361,7 +1420,17 @@ function FichaPartida({ partida: p0, onVoltar, readOnly, idTime }) {
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <div>
             <div style={{ fontSize: 12, color: C.dim, marginBottom: 4 }}>{fmtData(partida.data)} · {fmtHora(partida.data)} · {partida.em_casa === "S" ? "🏠 Em Casa" : "✈️ Fora"}</div>
-            <div style={{ fontSize: 24, fontWeight: 800, marginBottom: 6 }}>{partida.adversario?.nome || p0.adversario?.nome}</div>
+            {(partida.adversario?.nome || p0.adversario?.nome) ? (
+              <div style={{ fontSize: 24, fontWeight: 800, marginBottom: 6, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                {partida.adversario?.nome || p0.adversario?.nome}
+                {!readOnly && <button onClick={() => { setAdvSel(String(partida.id_adversario || p0.id_adversario || "")); setModalAdv(true); }} title="Trocar ou remover adversário" style={{ background: "none", border: `1px solid ${C.border}`, color: C.dim, borderRadius: 6, padding: "2px 8px", fontFamily: "inherit", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>✏️ alterar</button>}
+              </div>
+            ) : (
+              <div style={{ marginBottom: 6 }}>
+                <div style={{ fontSize: 20, fontWeight: 800, color: C.gold }}>🔍 Procurando adversário</div>
+                {!readOnly && <button onClick={() => { setAdvSel(""); setModalAdv(true); }} style={{ marginTop: 6, background: "none", border: `1px solid ${C.gold}`, color: C.gold, borderRadius: 8, padding: "4px 12px", fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>+ Definir adversário</button>}
+              </div>
+            )}
             <div style={{ fontSize: 13, color: C.dim }}>🏟️ {partida.campo?.nome || p0.campo?.nome}</div>
             {partida.observacoes && <div style={{ fontSize: 13, color: C.dim, marginTop: 4 }}>📝 {partida.observacoes}</div>}
           </div>
@@ -1473,6 +1542,53 @@ function FichaPartida({ partida: p0, onVoltar, readOnly, idTime }) {
         </Card>
       )}
 
+      {/* Times disponíveis nesta data (só quando a partida está procurando adversário) */}
+      {semAdversario && partida.cancelada !== "S" && (() => {
+        // Filtra: público, mesmo tipo de time, não o próprio time; dedupe por time
+        const vistos = new Set();
+        const times = [];
+        for (const pt of (disponiveis || [])) {
+          const t = pt.temporada?.time;
+          if (!t) continue;
+          if (t.id_time === idTime) continue;                 // não mostra o próprio time
+          if (t.publico === false) continue;                  // só públicos
+          if (meuTipoTime && t.id_tipo_time !== meuTipoTime) continue; // mesmo tipo
+          if (vistos.has(t.id_time)) continue;                // sem repetir
+          vistos.add(t.id_time);
+          times.push(t);
+        }
+        return (
+          <Card style={{ padding: "20px 24px", marginTop: 16 }}>
+            <div style={{ fontSize: 13, color: C.gold, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700, marginBottom: 4 }}>
+              🤝 Times disponíveis nesta data
+            </div>
+            <div style={{ fontSize: 12, color: C.dim, marginBottom: 16 }}>
+              Outros times do mesmo tipo que também têm {fmtData(partida.data)} livre. Entre em contato para combinar o jogo.
+            </div>
+            {loadingDisp ? <Spinner /> : times.length === 0 ? (
+              <div style={{ color: C.dim, fontSize: 13 }}>Nenhum time disponível nesta data por enquanto. Volte a consultar mais perto da data.</div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px,1fr))", gap: 12 }}>
+                {times.map(t => (
+                  <div key={t.id_time} style={{ background: C.surface, borderRadius: 12, padding: "18px 16px", border: `1px solid ${C.border}`, textAlign: "center" }}>
+                    {t.escudo_url
+                      ? <img src={t.escudo_url} alt={t.nome} style={{ width: 56, height: 56, borderRadius: "50%", objectFit: "cover", border: `2px solid ${C.gold}`, margin: "0 auto 10px", display: "block" }} />
+                      : <div style={{ width: 56, height: 56, borderRadius: "50%", background: C.surf2, border: `2px solid ${C.gold}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 10px", fontSize: 22 }}>⚽</div>
+                    }
+                    <div style={{ fontSize: 15, fontWeight: 800, textTransform: "uppercase", marginBottom: 6 }}>{t.nome}</div>
+                    {t.cidade && <div style={{ fontSize: 12, color: C.dim, marginBottom: 3 }}>📍 <span style={{ color: C.cream }}>{t.cidade.nome}{t.cidade.estado ? ` — ${t.cidade.estado}` : ""}</span></div>}
+                    {t.marca_jogos && <div style={{ fontSize: 12, color: C.dim, marginBottom: 3 }}>📋 <span style={{ color: C.cream }}>{t.marca_jogos}</span></div>}
+                    {t.telefone && <div style={{ fontSize: 13, color: C.dim, marginBottom: 2 }}>📞 <span style={{ color: C.cream, fontWeight: 700 }}>{t.telefone}</span></div>}
+                    {t.resp_redes_sociais && <div style={{ fontSize: 12, color: C.dim }}>📱 <span style={{ color: C.cream }}>{t.resp_redes_sociais}</span></div>}
+                    {!t.telefone && !t.resp_redes_sociais && <div style={{ fontSize: 11, color: C.dim, fontStyle: "italic" }}>Sem contato cadastrado</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        );
+      })()}
+
       {/* Financeiro da Partida */}
       {partida.cancelada !== "S" && (() => {
         const receitas = (movsPartida||[]).filter(m=>m.natureza==="receita").reduce((s,m)=>s+Number(m.valor||0),0);
@@ -1513,6 +1629,21 @@ function FichaPartida({ partida: p0, onVoltar, readOnly, idTime }) {
       })()}
 
       {/* Modais */}
+      {modalAdv && (
+        <Modal title={partida.id_adversario || p0.id_adversario ? "Trocar ou Remover Adversário" : "Definir Adversário"} onClose={() => setModalAdv(false)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <Select label="Adversário" value={advSel} onChange={e => setAdvSel(e.target.value)}>
+              <option value="">🔍 Procurando adversário (deixar em branco)</option>
+              {(advsFicha || []).map(a => <option key={a.id_adversario} value={a.id_adversario}>{a.nome}</option>)}
+            </Select>
+            <div style={{ fontSize: 12, color: C.dim }}>Deixe em branco para liberar a data e procurar outro time. Não encontrou o adversário? Cadastre-o primeiro em Adversários.</div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <Btn variant="secondary" onClick={() => setModalAdv(false)}>Cancelar</Btn>
+              <Btn onClick={definirAdversario} disabled={savingAdv}>{savingAdv ? "Salvando..." : "Salvar"}</Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
       {modalMovP && (
         <Modal title="Lançar Movimento — Partida" onClose={() => setModalMovP(false)}>
           <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
@@ -3441,7 +3572,7 @@ function TabelaJogadores({ grupo, lista, sk, asc, onSort, onEditar, onInativar, 
                 <td style={{ padding:"11px 14px", fontWeight:800, color:C.gold, whiteSpace:"nowrap" }}>{j.camisa}</td>
                 <td style={{ padding:"11px 14px", fontWeight:700, whiteSpace:"nowrap" }}>{j.nome}</td>
                 <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{j.apelido || "—"}</td>
-                <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{j.posicao?.nome || "—"}</td>
+                <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{j.posicao?.nome ? (j.posicao.posicao_pai?.nome ? `${j.posicao.posicao_pai.nome} › ${j.posicao.nome}` : j.posicao.nome) : "—"}</td>
                 <td style={{ padding:"11px 14px", color:C.dim, fontSize:12, whiteSpace:"nowrap" }}>{j.telefone || "—"}</td>
                 <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{j.email || "—"}</td>
                 <td style={{ padding:"11px 14px", color:C.dim, fontSize:12, whiteSpace:"nowrap" }}>{j.data_inicio ? new Date(j.data_inicio).toLocaleDateString("pt-BR") : "—"}</td>
@@ -3467,7 +3598,7 @@ function TabelaJogadores({ grupo, lista, sk, asc, onSort, onEditar, onInativar, 
 function CrudJogadores({ idTime, show, readOnly }) {
   const _idTimeJ = idTime; // recebido por prop (filtrado pelo usuário logado)
   const { data: jogadores, loading, reload } = useQuery(() => 
-    _idTimeJ ? api.get(`jogador?id_jogador=gt.0&id_time=eq.${_idTimeJ}&select=*,posicao(nome)&order=camisa.asc`) : Promise.resolve([]),
+    _idTimeJ ? api.get(`jogador?id_jogador=gt.0&id_time=eq.${_idTimeJ}&select=*,posicao(nome,ordem,posicao_pai:posicao!id_posicao_pai(nome))&order=camisa.asc`) : Promise.resolve([]),
     [_idTimeJ]
   );
   const { data: posicoes } = useQuery(() => api.get(`posicao?id_posicao_pai=not.is.null&select=*&order=nome.asc`));
