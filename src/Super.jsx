@@ -766,21 +766,32 @@ function CrudSolicitacoes({ show }) {
         if (cfg?.[0]?.valor) raioPadrao = parseInt(cfg[0].valor) || 50;
       } catch {}
 
-      // 1. Criar time
-      const timeRes = await api.post(`time`, {
-        nome: modalSol.nome_time,
-        id_tipo_time: modalSol.id_tipo_time || null,
-        data_fundacao: modalSol.data_fundacao || null,
-        telefone: modalSol.telefone || null,
-        id_cidade_sede: modalSol.id_cidade || null,
-        raio_busca_km: raioPadrao,
-        publico: false,
-      });
-
-      // 2. Buscar id do time criado
-      const times = await api.get(`time?nome=eq.${encodeURIComponent(modalSol.nome_time)}&order=id_time.desc&limit=1`);
-      const id_time = times?.[0]?.id_time;
-      if (!id_time) throw new Error("Não foi possível encontrar o time criado.");
+      // 1. Criar o time — mas se a solicitação já tem um time vinculado (retentativa
+      //    após falha no vínculo do usuário), reusa em vez de duplicar.
+      let id_time = modalSol.id_time_criado || null;
+      if (!id_time) {
+        const timeRes = await api.post(`time`, {
+          nome: modalSol.nome_time,
+          id_tipo_time: modalSol.id_tipo_time || null,
+          data_fundacao: modalSol.data_fundacao || null,
+          telefone: modalSol.telefone || null,
+          id_cidade_sede: modalSol.id_cidade || null,
+          raio_busca_km: raioPadrao,
+          publico: false,
+        });
+        // O POST retorna o registro criado (Prefer: return=representation)
+        id_time = Array.isArray(timeRes) ? timeRes[0]?.id_time : timeRes?.id_time;
+        // Fallback: buscar pelo nome se por algum motivo não veio no retorno
+        if (!id_time) {
+          const times = await api.get(`time?nome=eq.${encodeURIComponent(modalSol.nome_time)}&order=id_time.desc&limit=1`);
+          id_time = times?.[0]?.id_time;
+        }
+      }
+      if (!id_time) throw new Error("Não foi possível criar ou localizar o time.");
+      // Marca na solicitação qual time foi criado, para uma eventual retentativa não duplicar
+      if (!modalSol.id_time_criado) {
+        try { await api.patch(`solicitacao_time?id=eq.${modalSol.id}`, { id_time_criado: id_time }); } catch {}
+      }
 
       // 3. Criar usuário admin via RPC
       const rpcRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/criar_admin_time`, {
@@ -789,17 +800,21 @@ function CrudSolicitacoes({ show }) {
         body: JSON.stringify({ p_email: modalSol.email_responsavel, p_id_time: id_time, p_role: "admin" }),
       });
       const rpcData = await rpcRes.json();
-      const user_id = rpcData?.user_id;
+      // O RPC retorna { success, user_id, error }. Se falhou, PARA aqui (não marca como aprovado).
+      if (!rpcData || rpcData.success === false || !rpcData.user_id) {
+        const motivo = rpcData?.error || "não foi possível criar o vínculo do usuário.";
+        throw new Error(`Time criado, mas o acesso do admin não foi vinculado: ${motivo} Verifique se o e-mail ${modalSol.email_responsavel} já existe em Authentication → Users no Supabase, e tente aprovar novamente.`);
+      }
+      const user_id = rpcData.user_id;
 
-      // 4. Salvar permissões
-      if (user_id) {
-        for (const m of MODULOS_ADMIN) {
-          const p = permsForm[m.id];
-          await api.post(`usuario_permissao`, {
-            user_id, id_time, modulo: m.id,
-            pode_ver: p.ver, pode_editar: p.editar,
-          });
-        }
+      // 4. Salvar permissões (limpa antes, caso seja uma retentativa)
+      try { await api.delete(`usuario_permissao?user_id=eq.${user_id}&id_time=eq.${id_time}`); } catch {}
+      for (const m of MODULOS_ADMIN) {
+        const p = permsForm[m.id];
+        await api.post(`usuario_permissao`, {
+          user_id, id_time, modulo: m.id,
+          pode_ver: p.ver, pode_editar: p.editar,
+        });
       }
 
       // 5. Atualizar status da solicitação
@@ -1955,7 +1970,7 @@ function CrudTipoTime({ show }) {
 
 export default function SuperApp() {
   const [session, setSession] = useState(SESSION_TOKEN ? {access_token: SESSION_TOKEN} : null);
-  const APP_VERSION = process.env.REACT_APP_VERSION || "1.12.7";
+  const APP_VERSION = process.env.REACT_APP_VERSION || "1.12.8";
 
   if (!session) return <LoginSuper onLogin={setSession}/>;
 
