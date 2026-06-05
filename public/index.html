@@ -73,6 +73,8 @@
         .admin-sidebar .menu-grupo-titulo { display: none !important; }
         .admin-main { padding: 16px 14px !important; }
         .admin-header { padding: 0 12px !important; gap: 8px !important; }
+        /* Formulários: grids de 2+ colunas empilham em 1 coluna no mobile */
+        .form-grid-2, .form-grid-auto { grid-template-columns: 1fr !important; }
       }
       @media (max-width: 480px) {
         .header-time-nome { display: none !important; }

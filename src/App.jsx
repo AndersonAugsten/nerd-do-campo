@@ -203,8 +203,8 @@ function SeletorTimes({ onSelect }) {
                 onMouseEnter={e => { e.currentTarget.style.background = C.surf2; e.currentTarget.style.borderColor = C.gold; e.currentTarget.style.transform = "translateY(-2px)"; }}
                 onMouseLeave={e => { e.currentTarget.style.background = C.surface; e.currentTarget.style.borderColor = C.border; e.currentTarget.style.transform = "none"; }}>
                 {t.escudo_url
-                  ? <img src={t.escudo_url} alt={t.nome} style={{ width:72, height:72, borderRadius:"50%", objectFit:"cover", border:`2px solid ${C.gold}`, margin:"0 auto 16px", display:"block" }}/>
-                  : <div style={{ width:72, height:72, borderRadius:"50%", background:C.surf2, border:`2px solid ${C.gold}`, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 16px", fontSize:28 }}>⚽</div>
+                  ? <img src={t.escudo_url} alt={t.nome} style={{ width:96, height:96, borderRadius:"50%", objectFit:"cover", border:`3px solid ${C.gold}`, margin:"0 auto 16px", display:"block" }}/>
+                  : <div style={{ width:96, height:96, borderRadius:"50%", background:C.surf2, border:`3px solid ${C.gold}`, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 16px", fontSize:36 }}>⚽</div>
                 }
                 <div style={{ fontSize:18, fontWeight:800, textTransform:"uppercase", marginBottom:8 }}>{t.nome}</div>
                 {t.data_fundacao && (
@@ -335,14 +335,14 @@ function VisaoGeral({ temporada }) {
           <div style={{ display:"flex", alignItems:"center", gap:20, flexWrap:"wrap" }}>
             {temporada?.escudo_url && (
               <img src={temporada.escudo_url} alt="Escudo"
-                style={{ width:64, height:64, borderRadius:"50%", objectFit:"cover", border:`3px solid ${C.gold}` }}/>
+                style={{ width:88, height:88, borderRadius:"50%", objectFit:"cover", border:`3px solid ${C.gold}` }}/>
             )}
             {uniformes.length > 0 && (
               <div style={{ display:"flex", gap:16, flexWrap:"wrap" }}>
                 {uniformes.map(u => (
                   <div key={u.label} style={{ textAlign:"center" }}>
                     <img src={u.url} alt={u.label}
-                      style={{ width:72, height:72, objectFit:"contain", borderRadius:8, background:C.surf2, border:`1px solid ${C.border}`, display:"block", marginBottom:4 }}/>
+                      style={{ width:110, height:110, objectFit:"contain", borderRadius:8, background:C.surf2, border:`1px solid ${C.border}`, display:"block", marginBottom:6 }}/>
                     <div style={{ fontSize:10, color:C.dim }}>{u.label}</div>
                   </div>
                 ))}
@@ -408,7 +408,7 @@ function FichaPartidaPublica({ partida, onVoltar }) {
     [partida.id_partida]
   );
   const { data: gols, loading: loadGols } = useQuery(
-    () => sb(`gol?select=*,participacao!inner(id_jogador,jogador(nome,apelido,camisa))&participacao.id_partida=eq.${partida.id_partida}&order=periodo.asc,minuto.asc`),
+    () => sb(`gol?select=*,participacao!inner(id_jogador,jogador(nome,apelido,camisa))&participacao.id_partida=eq.${partida.id_partida}&participacao.id_jogador=gt.0&order=periodo.asc,minuto.asc`),
     [partida.id_partida]
   );
 
