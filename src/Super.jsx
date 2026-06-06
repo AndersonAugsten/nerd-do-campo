@@ -420,8 +420,7 @@ function UsuariosTable({ times, reload, show, onPermissoes }) {
 
 // ── FORM NOVO TIME ────────────────────────────────────────────
 function FormNovoTime({ onSalvo, show }) {
-  const { data: campos } = useQuery(() => api.get(`campo?select=*&order=nome.asc`));
-  const [form, setForm] = useState({ nome:"", data_fundacao:"", numero_titulares:"11", quantidade_periodos:"2", minutos_padrao_periodo:"45", permite_acrescimos:"N", tecnico:"", presidente:"", id_campo:"", nivel_mensalidade:"1" });
+  const [form, setForm] = useState({ nome:"", data_fundacao:"", numero_titulares:"11", quantidade_periodos:"2", minutos_padrao_periodo:"45", permite_acrescimos:"N", tecnico:"", presidente:"", nivel_mensalidade:"1" });
   const [saving, setSaving] = useState(false);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
 
@@ -438,7 +437,6 @@ function FormNovoTime({ onSalvo, show }) {
         permite_acrescimos: form.permite_acrescimos,
         tecnico: form.tecnico||null,
         presidente: form.presidente||null,
-        id_campo: form.id_campo?Number(form.id_campo):null,
         nivel_mensalidade: Number(form.nivel_mensalidade)||1,
       });
       // Criar temporada inicial automaticamente
@@ -461,12 +459,8 @@ function FormNovoTime({ onSalvo, show }) {
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
       <Input label="Nome do Time *" value={form.nome} onChange={e=>set("nome",e.target.value)} placeholder="Ex: Flamengo FC Amador"/>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr", gap:12 }}>
         <Input label="Data Fundação" type="date" value={form.data_fundacao} onChange={e=>set("data_fundacao",e.target.value)}/>
-        <Select label="Campo Principal" value={form.id_campo} onChange={e=>set("id_campo",e.target.value)}>
-          <option value="">Selecione...</option>
-          {(campos||[]).map(c=><option key={c.id_campo} value={c.id_campo}>{c.nome}</option>)}
-        </Select>
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(130px, 1fr))", gap:12 }}>
         <Input label="Nº Titulares" type="number" value={form.numero_titulares} onChange={e=>set("numero_titulares",e.target.value)}/>
@@ -955,9 +949,7 @@ function CrudSolicitacoes({ show, onMudou }) {
                   ["Time",          modalSol.nome_time],
                   ["Tipo",          modalSol.tipo_time?.descricao || "—"],
                   ["Cidade",        modalSol.cidade || "—"],
-                  ["Campo",         modalSol.campo_principal || "—"],
                   ["Fundação",      modalSol.data_fundacao ? new Date(modalSol.data_fundacao+"T12:00:00").toLocaleDateString("pt-BR") : "—"],
-                  ["Redes Sociais", modalSol.redes_sociais || "—"],
                   ["Responsável",   modalSol.nome_responsavel],
                   ["E-mail",        modalSol.email_responsavel],
                   ["Telefone",      modalSol.telefone],
@@ -2003,7 +1995,7 @@ function CrudTipoTime({ show }) {
 
 export default function SuperApp() {
   const [session, setSession] = useState(SESSION_TOKEN ? {access_token: SESSION_TOKEN} : null);
-  const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.12";
+  const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.16";
 
   if (!session) return <LoginSuper onLogin={setSession}/>;
 

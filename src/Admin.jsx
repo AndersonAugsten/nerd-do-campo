@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.12";
+const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.16";
 const UFS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 // Distância em km entre dois pontos (lat/long) — fórmula de Haversine
 function distanciaKm(lat1, lon1, lat2, lon2) {
@@ -753,7 +753,24 @@ function VisaoAppPublico({ time, temporadas }) {
 // MÓDULO IMPORTAÇÃO / EXPORTAÇÃO
 // ══════════════════════════════════════════════════════════════
 
-function exportarExcel(dados, colunas, nomeArquivo, instrucoes) {
+// Carrega TODAS as cidades da base nacional (paginando o limite de 1000 do PostgREST).
+// Usado nas planilhas (aba de referência) e na validação de importação por nome+UF.
+async function carregarTodasCidades() {
+  const todas = [];
+  let offset = 0;
+  const pag = 1000;
+  // Limite de segurança: ~6 páginas cobrem os 5570 municípios do Brasil.
+  for (let i = 0; i < 8; i++) {
+    const lote = await api.get(`cidade?select=id_cidade,nome,estado&order=estado.asc,nome.asc&limit=${pag}&offset=${offset}`);
+    if (!lote || lote.length === 0) break;
+    todas.push(...lote);
+    if (lote.length < pag) break;
+    offset += pag;
+  }
+  return todas;
+}
+
+function exportarExcel(dados, colunas, nomeArquivo, instrucoes, abaReferencia) {
   const XLSX = window.XLSX;
   if (!XLSX) { alert("Recarregue a página para usar esta função."); return; }
   const wb = XLSX.utils.book_new();
@@ -775,6 +792,12 @@ function exportarExcel(dados, colunas, nomeArquivo, instrucoes) {
     ]);
     wsInst["!cols"] = [{ wch: 80 }];
     XLSX.utils.book_append_sheet(wb, wsInst, "Instruções");
+  }
+  // Aba de referência opcional (ex: lista de cidades válidas com UF, para consulta)
+  if (abaReferencia && abaReferencia.dados && abaReferencia.dados.length) {
+    const wsRef = XLSX.utils.aoa_to_sheet([abaReferencia.colunas, ...abaReferencia.dados]);
+    wsRef["!cols"] = (abaReferencia.larguras || abaReferencia.colunas.map(()=>25)).map(w => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, wsRef, abaReferencia.nome || "Referência");
   }
   XLSX.writeFile(wb, `${nomeArquivo}.xlsx`);
 }
@@ -1286,14 +1309,14 @@ function ListaPartidas({ temporada, onSelect, onNova, adversarios, campos, show:
 // Wrapper que busca adversarios e campos para passar à ListaPartidas
 function ListaPartidasWrapper({ temporada, onSelect, onNova, show, readOnly }) {
   const { data: adversarios } = useQuery(() => temporada?.id_time ? api.get(`adversario?id_time=eq.${temporada.id_time}&select=*&order=nome.asc`) : Promise.resolve([]), [temporada]);
-  const { data: campos }      = useQuery(() => api.get(`campo?select=*&order=nome.asc`));
+  const { data: campos }      = useQuery(() => temporada?.id_time ? api.get(`campo?id_time=eq.${temporada.id_time}&select=*&order=nome.asc`) : Promise.resolve([]), [temporada]);
   return <ListaPartidas temporada={temporada} onSelect={onSelect} onNova={onNova} adversarios={adversarios} campos={campos} show={show}/>;
 }
 
 // ── FORM NOVA PARTIDA ─────────────────────────────────────────
 function FormNovaPartida({ temporada, onSalvo, onCancelar, readOnly = false }) {
   const { data: adversarios } = useQuery(() => temporada?.id_time ? api.get(`adversario?id_time=eq.${temporada.id_time}&select=*&order=nome.asc`) : Promise.resolve([]), [temporada]);
-  const { data: campos }      = useQuery(() => api.get(`campo?select=*&order=nome.asc`));
+  const { data: campos }      = useQuery(() => temporada?.id_time ? api.get(`campo?id_time=eq.${temporada.id_time}&select=*&order=nome.asc`) : Promise.resolve([]), [temporada]);
   const { data: time }        = useQuery(() => temporada?.id_time ? api.get(`time?id_time=eq.${temporada.id_time}&select=*&limit=1`) : Promise.resolve([]), [temporada]);
 
   const [form, setForm] = useState({ data: "", horario: "14:00", id_adversario: "", em_casa: "S", id_campo: "", observacoes: "" });
@@ -3596,7 +3619,7 @@ export default function AdminAppCompleto() {
   );
   // Dados para onboarding
   const { data: _cidades }    = useQuery(() => api.get(`cidade?select=id_cidade&limit=1`), [session]);
-  const { data: _campos }     = useQuery(() => api.get(`campo?select=id_campo&limit=1`), [session]);
+  const { data: _campos }     = useQuery(() => idTime ? api.get(`campo?id_time=eq.${idTime}&select=id_campo&limit=1`) : Promise.resolve([]), [session, idTime]);
   const { data: _posicoes }   = useQuery(() => api.get(`posicao?select=id_posicao&limit=1`), [session]);
   const { data: _adversarios } = useQuery(() => idTime ? api.get(`adversario?id_time=eq.${idTime}&select=id_adversario&limit=1`) : Promise.resolve([]), [session, idTime]);
   const { data: _jogadores }  = useQuery(() => idTime ? api.get(`jogador?id_time=eq.${idTime}&id_jogador=gt.0&select=id_jogador&limit=1`) : Promise.resolve([]), [session, idTime]);
@@ -4072,7 +4095,7 @@ function CrudAdversarios({ idTime, show, readOnly }) {
     [_idTimeA]
   );
   const [_sk, _setSk] = useState("nome"); const [_asc, _setAsc] = useState(true);
-  const { data: campos }  = useQuery(() => api.get(`campo?select=*&order=nome.asc`));
+  const { data: campos }  = useQuery(() => _idTimeA ? api.get(`campo?id_time=eq.${_idTimeA}&select=*&order=nome.asc`) : Promise.resolve([]), [_idTimeA]);
   const [ufAdv, setUfAdv] = useState("RS");
   const { data: cidades } = useQuery(() => ufAdv ? api.get(`cidade?estado=eq.${ufAdv}&select=id_cidade,nome,estado&order=nome.asc`) : Promise.resolve([]), [ufAdv]);
   const [modal, setModal]   = useState(null);
@@ -4206,9 +4229,12 @@ function CrudAdversarios({ idTime, show, readOnly }) {
 
 // ── CRUD CAMPOS ───────────────────────────────────────────────
 function CrudCampos({ idTime, show, readOnly }) {
-  const { data: campos, loading, reload } = useQuery(() => api.get(`campo?select=*,cidade(nome,estado)&order=nome.asc`));
+  const { data: campos, loading, reload } = useQuery(() => idTime ? api.get(`campo?id_time=eq.${idTime}&select=*,cidade(nome,estado)&order=nome.asc`) : Promise.resolve([]), [idTime]);
   const [ufCampo, setUfCampo] = useState("RS");
   const { data: cidades } = useQuery(() => ufCampo ? api.get(`cidade?estado=eq.${ufCampo}&select=id_cidade,nome,estado&order=nome.asc`) : Promise.resolve([]), [ufCampo]);
+  // Base nacional completa (para a planilha de referência e validação da importação por nome+UF)
+  const [cidadesBR, setCidadesBR] = useState([]);
+  useEffect(() => { carregarTodasCidades().then(setCidadesBR).catch(()=>{}); }, []);
   const [_sk, _setSk] = useState("nome"); const [_asc, _setAsc] = useState(true);
   const [modal, setModal]   = useState(null);
   const [form, setForm]     = useState({});
@@ -4221,8 +4247,15 @@ function CrudCampos({ idTime, show, readOnly }) {
     setSaving(true);
     try {
       for (const row of resultadoImport._dados) {
-        const cidade = (cidades||[]).find(c => c.nome.toUpperCase() === String(row.cidade||"").trim().toUpperCase());
-        const body = { nome: String(row.nome||"").trim(), endereco: row.endereco||null, id_cidade: cidade?.id_cidade||null };
+        const cidadeNome = String(row.cidade||"").trim().toUpperCase();
+        const ufRow = String(row.uf||"").trim().toUpperCase();
+        let cidade = null;
+        if (cidadeNome) {
+          let cand = (cidadesBR||[]).filter(c => c.nome.toUpperCase() === cidadeNome);
+          if (ufRow) cand = cand.filter(c => (c.estado||"").toUpperCase() === ufRow);
+          cidade = cand[0] || null;
+        }
+        const body = { nome: String(row.nome||"").trim(), endereco: row.endereco||null, id_cidade: cidade?.id_cidade||null, id_time: idTime||null };
         if (row.id_campo) await api.patch(`campo?id_campo=eq.${row.id_campo}`, body);
         else await api.post("campo", body);
       }
@@ -4237,7 +4270,7 @@ function CrudCampos({ idTime, show, readOnly }) {
     if (!form.nome) { show("Nome obrigatório.", "error"); return; }
     setSaving(true);
     try {
-      const body = { nome: form.nome, endereco: form.endereco||null, id_cidade: form.id_cidade?Number(form.id_cidade):null, observacoes: form.observacoes||null };
+      const body = { nome: form.nome, endereco: form.endereco||null, id_cidade: form.id_cidade?Number(form.id_cidade):null, observacoes: form.observacoes||null, id_time: idTime||null };
       if (modal === "novo") await api.post("campo", body);
       else await api.patch(`campo?id_campo=eq.${form.id_campo}`, body);
       show("Salvo!"); setModal(null); reload();
@@ -4251,15 +4284,18 @@ function CrudCampos({ idTime, show, readOnly }) {
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
         <BotoesImportExport
           onExportar={() => exportarExcel(
-            (campos||[]).map(c => ({...c, cidade: c.cidade ? `${c.cidade.nome}` : ""})),
+            (campos||[]).map(c => ({...c, cidade: c.cidade ? `${c.cidade.nome}` : "", uf: c.cidade ? c.cidade.estado : ""})),
             [
               { key:"id_campo",  label:"id",       width:8,  descricao:"NÃO altere. Vazio = novo registro." },
               { key:"nome",      label:"nome",     width:30, descricao:"Nome do campo. OBRIGATÓRIO." },
               { key:"endereco",  label:"endereco", width:40, descricao:"Endereço do campo." },
-              { key:"cidade",    label:"cidade",   width:25, descricao:"Nome exato da cidade cadastrada no sistema." },
+              { key:"uf",        label:"uf",       width:8,  descricao:"Sigla do estado (ex: RS). Ajuda a localizar a cidade certa." },
+              { key:"cidade",    label:"cidade",   width:25, descricao:"Nome da cidade. Consulte a aba 'Cidades' para os nomes válidos." },
             ],
             "campos",
-            ["- id preenchido = atualiza", "- id vazio = cria novo", "- Cidade deve estar cadastrada no sistema"]
+            ["- id preenchido = atualiza", "- id vazio = cria novo", "- Consulte a aba 'Cidades' para ver os nomes válidos", "- Preencha UF + cidade para evitar ambiguidade (ex: duas cidades com o mesmo nome em estados diferentes)"],
+            { nome:"Cidades", colunas:["uf","cidade"], larguras:[8,30],
+              dados:(cidadesBR||[]).map(c => [c.estado, c.nome]) }
           )}
           onImportar={async (file) => {
             setLoadingImport("campos");
@@ -4271,9 +4307,16 @@ function CrudCampos({ idTime, show, readOnly }) {
                 const nome = String(row["nome"]||"").trim();
                 if (!nome) { erros.push({ linha, mensagem: "Campo 'nome' é obrigatório." }); return; }
                 const cidadeNome = String(row["cidade"]||"").trim();
+                const ufRow = String(row["uf"]||"").trim().toUpperCase();
                 if (cidadeNome) {
-                  const cidadeOk = (cidades||[]).find(c => c.nome.toUpperCase() === cidadeNome.toUpperCase());
-                  if (!cidadeOk) erros.push({ linha, mensagem: `Cidade '${cidadeNome}' não encontrada. Cadastre primeiro.` });
+                  // Valida contra a base NACIONAL (não só o UF do dropdown da tela).
+                  let candidatos = (cidadesBR||[]).filter(c => c.nome.toUpperCase() === cidadeNome.toUpperCase());
+                  if (ufRow) candidatos = candidatos.filter(c => (c.estado||"").toUpperCase() === ufRow);
+                  if (candidatos.length === 0) {
+                    erros.push({ linha, mensagem: `Cidade '${cidadeNome}'${ufRow?` (${ufRow})`:""} não encontrada na base. Confira a aba 'Cidades'.` });
+                  } else if (candidatos.length > 1) {
+                    erros.push({ linha, mensagem: `Cidade '${cidadeNome}' existe em mais de um estado. Preencha a coluna 'uf' para indicar qual.` });
+                  }
                 }
                 if (!erros.find(e => e.linha === linha)) validos.push(row);
               });
@@ -4743,7 +4786,7 @@ function CrudTemporadas({ idTime, show, readOnly }) {
 // ── CONFIGURAÇÕES DO TIME ─────────────────────────────────────
 function ConfigTime({ idTime, show, readOnly }) {
   const { data: times, loading, reload } = useQuery(() => idTime ? api.get(`time?id_time=eq.${idTime}&select=*,campo(nome)&limit=1`) : Promise.resolve([]), [idTime]);
-  const { data: campos  } = useQuery(() => api.get(`campo?select=*&order=nome.asc`));
+  const { data: campos  } = useQuery(() => idTime ? api.get(`campo?id_time=eq.${idTime}&select=*&order=nome.asc`) : Promise.resolve([]), [idTime]);
   const [ufSede, setUfSede] = useState("RS");
   const { data: cidades } = useQuery(() => ufSede ? api.get(`cidade?estado=eq.${ufSede}&select=id_cidade,nome,estado&order=nome.asc`) : Promise.resolve([]), [ufSede]);
   const { data: tipos   } = useQuery(() => api.get(`tipo_time?select=*&status=eq.Ativo&order=descricao.asc`));
