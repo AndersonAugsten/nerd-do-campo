@@ -789,6 +789,19 @@ function CrudSolicitacoes({ show, onMudou }) {
       //    após falha no vínculo do usuário), reusa em vez de duplicar.
       let id_time = modalSol.id_time_criado || null;
       if (!id_time) {
+        // Buscar os parâmetros padrão do tipo de time escolhido (períodos, titulares etc.)
+        let paramsTipo = {};
+        if (modalSol.id_tipo_time) {
+          try {
+            const tt = await api.get(`tipo_time?id_tipo_time=eq.${modalSol.id_tipo_time}&select=numero_titulares,quantidade_periodos,minutos_padrao_periodo,permite_acrescimos&limit=1`);
+            if (tt?.[0]) paramsTipo = {
+              numero_titulares: tt[0].numero_titulares ?? 11,
+              quantidade_periodos: tt[0].quantidade_periodos ?? 2,
+              minutos_padrao_periodo: tt[0].minutos_padrao_periodo ?? 45,
+              permite_acrescimos: tt[0].permite_acrescimos ?? "S",
+            };
+          } catch {}
+        }
         const timeRes = await api.post(`time`, {
           nome: modalSol.nome_time,
           id_tipo_time: modalSol.id_tipo_time || null,
@@ -797,6 +810,7 @@ function CrudSolicitacoes({ show, onMudou }) {
           id_cidade_sede: modalSol.id_cidade || null,
           raio_busca_km: raioPadrao,
           publico: false,
+          ...paramsTipo,
         });
         // O POST retorna o registro criado (Prefer: return=representation)
         id_time = Array.isArray(timeRes) ? timeRes[0]?.id_time : timeRes?.id_time;
@@ -1989,7 +2003,7 @@ function CrudTipoTime({ show }) {
 
 export default function SuperApp() {
   const [session, setSession] = useState(SESSION_TOKEN ? {access_token: SESSION_TOKEN} : null);
-  const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.11";
+  const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.12";
 
   if (!session) return <LoginSuper onLogin={setSession}/>;
 

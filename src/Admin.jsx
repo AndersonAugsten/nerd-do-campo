@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.11";
+const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.12";
 const UFS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 // Distância em km entre dois pontos (lat/long) — fórmula de Haversine
 function distanciaKm(lat1, lon1, lat2, lon2) {
@@ -16,6 +16,18 @@ const URL  = process.env.REACT_APP_SUPABASE_URL || "https://nxztffulmvohduvudbhg
 const ANON = process.env.REACT_APP_SUPABASE_ANON || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im54enRmZnVsbXZvaGR1dnVkYmhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODY5ODMsImV4cCI6MjA5NTA2Mjk4M30.CwEmjukApMTJhkbKh1jlp4Q-IYrM26u-5SYx9p20nsg";
 
 let SESSION_TOKEN = sessionStorage.getItem("ndc_token") || null;
+
+// Extrai o e-mail do usuário logado a partir do token JWT (payload base64).
+// Usado para registrar quem lançou cada movimento de caixa.
+function emailUsuarioLogado() {
+  try {
+    if (!SESSION_TOKEN) return null;
+    const payload = SESSION_TOKEN.split(".")[1];
+    if (!payload) return null;
+    const json = JSON.parse(decodeURIComponent(escape(atob(payload.replace(/-/g, "+").replace(/_/g, "/")))));
+    return json.email || null;
+  } catch { return null; }
+}
 
 async function sbAuth(path, body) {
   const res = await fetch(`${URL}/auth/v1/${path}`, {
@@ -1511,6 +1523,7 @@ function FichaPartida({ partida: p0, onVoltar, readOnly, idTime }) {
         id_time: idTimeP, id_tipo_movimento: tipo.id_tipo_movimento, natureza: tipo.natureza,
         valor: Number(formMovP.valor), data_movimento: formMovP.data_movimento,
         observacao: formMovP.observacao||null, origem:"partida", id_partida: partida.id_partida,
+        registrado_por: emailUsuarioLogado(),
       });
       show("Lançamento adicionado!"); setModalMovP(false); reloadMovsP();
     } catch(e){ show("Erro: "+e.message, "error"); }
@@ -2439,6 +2452,7 @@ function CrudMensalidades({ idTime, show, readOnly }) {
           valor: Number(dados.valor_pago), data_movimento: dados.data_pagamento || new Date().toISOString().split("T")[0],
           observacao: `Mensalidade ${String(dados.mes).padStart(2,"0")}/${dados.ano}${nomeJogador?` — ${nomeJogador}`:""}`,
           origem: "mensalidade", id_mensalidade,
+          registrado_por: emailUsuarioLogado(),
         };
         if (temMov) await api.patch(`movimento_caixa?id_mensalidade=eq.${id_mensalidade}`, body);
         else await api.post(`movimento_caixa`, body);
@@ -2811,7 +2825,7 @@ function PaginaAjuda() {
           O manual contém o guia completo do sistema — desde o cadastro inicial
           até o controle de mensalidades. Atualizado para a versão atual.
         </div>
-        <a href="/manual.pdf?v=1.13.10" target="_blank" rel="noopener noreferrer"
+        <a href="/manual.pdf?v=1.13.12" target="_blank" rel="noopener noreferrer"
           style={{ display:"inline-flex", alignItems:"center", gap:10,
             background:C.gold, color:"#0B3D2E", borderRadius:10,
             padding:"14px 28px", fontFamily:"inherit", fontWeight:800,
@@ -3037,6 +3051,7 @@ function CrudCaixa({ idTime, show, readOnly }) {
         Valor: Number(m.valor||0),
         Saldo: a,
         Observação: m.observacao || "",
+        "Lançado por": m.registrado_por || "",
       };
     });
   }
@@ -3225,7 +3240,7 @@ function CrudCaixa({ idTime, show, readOnly }) {
         <div style={{ overflowX:"auto" }}>
           <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
             <thead><tr style={{ background:C.surf2 }}>
-              {["Data","Descrição","Origem","Valor", temFiltro?"Acum. (seleção)":"Saldo","Obs."].map(h=>(
+              {["Data","Descrição","Origem","Valor", temFiltro?"Acum. (seleção)":"Saldo","Obs.","Lançado por"].map(h=>(
                 <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontSize:11, color:C.dim, textTransform:"uppercase", fontWeight:700, whiteSpace:"nowrap" }}>{h}</th>
               ))}
             </tr></thead>
@@ -3240,9 +3255,10 @@ function CrudCaixa({ idTime, show, readOnly }) {
                   </td>
                   <td style={{ padding:"10px 14px", fontWeight:700, whiteSpace:"nowrap", color: m.saldoAcc>=0?C.cream:C.loss }}>{fmtMoeda(m.saldoAcc)}</td>
                   <td style={{ padding:"10px 14px", color:C.dim, fontSize:11, maxWidth:160 }}>{m.observacao || "—"}</td>
+                  <td style={{ padding:"10px 14px", color:C.dim, fontSize:11, whiteSpace:"nowrap" }}>{m.registrado_por || "—"}</td>
                 </tr>
               ))}
-              {extrato.length===0 && <tr><td colSpan={6} style={{ padding:24, textAlign:"center", color:C.dim }}>Nenhum movimento registrado.</td></tr>}
+              {extrato.length===0 && <tr><td colSpan={7} style={{ padding:24, textAlign:"center", color:C.dim }}>Nenhum movimento registrado.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -3361,6 +3377,7 @@ function CrudEventos({ idTime, show, readOnly }) {
         id_time: idTime, id_tipo_movimento: tipo.id_tipo_movimento, natureza: tipo.natureza,
         valor: Number(formMov.valor), data_movimento: formMov.data_movimento,
         observacao: formMov.observacao||null, origem:"evento", id_evento: formMov.id_evento,
+        registrado_por: emailUsuarioLogado(),
       });
       show("Lançamento adicionado!"); setFormMov(f=>({ ...f, valor:"", observacao:"" })); reloadMovs();
     } catch(e){ show("Erro: "+e.message, "error"); }
@@ -3810,6 +3827,12 @@ export default function AdminAppCompleto() {
           </>)}
         </main>
       </div>
+      <footer style={{ position:"sticky", bottom:0, zIndex:90, background:"#091F15", borderTop:`1px solid ${C.border}`,
+        padding:"8px 20px", textAlign:"center", fontSize:12, color:C.dim, lineHeight:1.4 }}>
+        👥 Seu time pode ter <b style={{color:C.cream}}>vários administradores</b>, cada um com acesso aos módulos que você definir.
+        <span style={{color:C.gold}}> A quantidade de usuários não altera o valor da mensalidade do time.</span>
+        {canEdit("time") && <> Fale com o suporte para adicionar novos acessos.</>}
+      </footer>
     </div>
   );
 }

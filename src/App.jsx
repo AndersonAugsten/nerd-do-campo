@@ -892,7 +892,7 @@ const UFS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG"
 function ModalSolicitacao({ onClose }) {
   const [form, setForm] = useState({
     nome_time:"", id_tipo_time:"", data_fundacao:"", cidade:"", id_cidade:"",
-    campo_principal:"", redes_sociais:"",
+    redes_sociais:"",
     nome_responsavel:"", email_responsavel:"", telefone:"",
   });
   const [uf, setUf] = useState("RS"); // RS é o padrão (público inicial)
@@ -928,7 +928,6 @@ function ModalSolicitacao({ onClose }) {
         data_fundacao:      form.data_fundacao || null,
         cidade:             cidadeTexto,
         id_cidade:          form.id_cidade ? Number(form.id_cidade) : null,
-        campo_principal:    form.campo_principal.trim() || null,
         redes_sociais:      form.redes_sociais.trim() || null,
         nome_responsavel:   form.nome_responsavel.trim(),
         email_responsavel:  form.email_responsavel.trim().toLowerCase(),
@@ -1024,13 +1023,6 @@ function ModalSolicitacao({ onClose }) {
             <div>
               <div style={{ fontSize:11, color:C.dim, marginBottom:4 }}>Data de Fundação</div>
               <input type="date" value={form.data_fundacao} onChange={e => set("data_fundacao", e.target.value)}
-                style={{ width:"100%", background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8, color:C.cream, fontFamily:"inherit", fontSize:14, padding:"10px 12px", boxSizing:"border-box", outline:"none" }}/>
-            </div>
-
-            <div>
-              <div style={{ fontSize:11, color:C.dim, marginBottom:4 }}>Campo Principal</div>
-              <input value={form.campo_principal} onChange={e => set("campo_principal", e.target.value)}
-                placeholder="Ex: Campo do Bairro Centro"
                 style={{ width:"100%", background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8, color:C.cream, fontFamily:"inherit", fontSize:14, padding:"10px 12px", boxSizing:"border-box", outline:"none" }}/>
             </div>
 
