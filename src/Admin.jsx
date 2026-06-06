@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.11";
+const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.18";
 const UFS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 // Distância em km entre dois pontos (lat/long) — fórmula de Haversine
 function distanciaKm(lat1, lon1, lat2, lon2) {
@@ -16,6 +16,18 @@ const URL  = process.env.REACT_APP_SUPABASE_URL || "https://nxztffulmvohduvudbhg
 const ANON = process.env.REACT_APP_SUPABASE_ANON || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im54enRmZnVsbXZvaGR1dnVkYmhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODY5ODMsImV4cCI6MjA5NTA2Mjk4M30.CwEmjukApMTJhkbKh1jlp4Q-IYrM26u-5SYx9p20nsg";
 
 let SESSION_TOKEN = sessionStorage.getItem("ndc_token") || null;
+
+// Extrai o e-mail do usuário logado a partir do token JWT (payload base64).
+// Usado para registrar quem lançou cada movimento de caixa.
+function emailUsuarioLogado() {
+  try {
+    if (!SESSION_TOKEN) return null;
+    const payload = SESSION_TOKEN.split(".")[1];
+    if (!payload) return null;
+    const json = JSON.parse(decodeURIComponent(escape(atob(payload.replace(/-/g, "+").replace(/_/g, "/")))));
+    return json.email || null;
+  } catch { return null; }
+}
 
 async function sbAuth(path, body) {
   const res = await fetch(`${URL}/auth/v1/${path}`, {
@@ -155,7 +167,7 @@ function BadgeA({ label, cor }) {
 
 function VisaoGeral({ temporada }) {
   const { data: partidas, loading } = useQuery(
-    () => sb(`partida?id_temporada=eq.${temporada.id_temporada}&select=*,adversario(nome),campo(nome)&order=data.asc`),
+    () => sb(`partida?id_temporada=eq.${temporada.id_temporada}&select=*,adversario(nome),campo:id_campo(nome)&order=data.asc`),
     [temporada.id_temporada]
   );
   const { data: topGols }   = useQuery(() => sb(`vw_stats_temporada?id_temporada=eq.${temporada.id_temporada}&select=*&order=gols_marcados.desc&limit=5`), [temporada.id_temporada]);
@@ -394,7 +406,7 @@ function Calendario({ temporada }) {
   const [filtro, setFiltro] = useState("pendentes");
   const [partidaSel, setPartidaSel] = useState(null);
   const { data: partidas, loading } = useQuery(
-    () => sb(`partida?id_temporada=eq.${temporada.id_temporada}&select=*,adversario(nome),campo(nome)&order=data.asc`),
+    () => sb(`partida?id_temporada=eq.${temporada.id_temporada}&select=*,adversario(nome),campo:id_campo(nome)&order=data.asc`),
     [temporada.id_temporada]
   );
   if (loading) return <Spinner />;
@@ -741,7 +753,24 @@ function VisaoAppPublico({ time, temporadas }) {
 // MÓDULO IMPORTAÇÃO / EXPORTAÇÃO
 // ══════════════════════════════════════════════════════════════
 
-function exportarExcel(dados, colunas, nomeArquivo, instrucoes) {
+// Carrega TODAS as cidades da base nacional (paginando o limite de 1000 do PostgREST).
+// Usado nas planilhas (aba de referência) e na validação de importação por nome+UF.
+async function carregarTodasCidades() {
+  const todas = [];
+  let offset = 0;
+  const pag = 1000;
+  // Limite de segurança: ~6 páginas cobrem os 5570 municípios do Brasil.
+  for (let i = 0; i < 8; i++) {
+    const lote = await api.get(`cidade?select=id_cidade,nome,estado&order=estado.asc,nome.asc&limit=${pag}&offset=${offset}`);
+    if (!lote || lote.length === 0) break;
+    todas.push(...lote);
+    if (lote.length < pag) break;
+    offset += pag;
+  }
+  return todas;
+}
+
+function exportarExcel(dados, colunas, nomeArquivo, instrucoes, abaReferencia) {
   const XLSX = window.XLSX;
   if (!XLSX) { alert("Recarregue a página para usar esta função."); return; }
   const wb = XLSX.utils.book_new();
@@ -763,6 +792,12 @@ function exportarExcel(dados, colunas, nomeArquivo, instrucoes) {
     ]);
     wsInst["!cols"] = [{ wch: 80 }];
     XLSX.utils.book_append_sheet(wb, wsInst, "Instruções");
+  }
+  // Aba de referência opcional (ex: lista de cidades válidas com UF, para consulta)
+  if (abaReferencia && abaReferencia.dados && abaReferencia.dados.length) {
+    const wsRef = XLSX.utils.aoa_to_sheet([abaReferencia.colunas, ...abaReferencia.dados]);
+    wsRef["!cols"] = (abaReferencia.larguras || abaReferencia.colunas.map(()=>25)).map(w => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, wsRef, abaReferencia.nome || "Referência");
   }
   XLSX.writeFile(wb, `${nomeArquivo}.xlsx`);
 }
@@ -1120,7 +1155,7 @@ function Login({ onLogin }) {
 // ── LISTA DE PARTIDAS ─────────────────────────────────────────
 function ListaPartidas({ temporada, onSelect, onNova, adversarios, campos, show: onShow }) {
   const { data: partidas, loading, reload } = useQuery(
-    () => api.get(`partida?id_temporada=eq.${temporada.id_temporada}&select=*,adversario(nome),campo(nome)&order=data.asc`),
+    () => api.get(`partida?id_temporada=eq.${temporada.id_temporada}&select=*,adversario(nome),campo:id_campo(nome)&order=data.asc`),
     [temporada.id_temporada]
   );
 
@@ -1274,14 +1309,14 @@ function ListaPartidas({ temporada, onSelect, onNova, adversarios, campos, show:
 // Wrapper que busca adversarios e campos para passar à ListaPartidas
 function ListaPartidasWrapper({ temporada, onSelect, onNova, show, readOnly }) {
   const { data: adversarios } = useQuery(() => temporada?.id_time ? api.get(`adversario?id_time=eq.${temporada.id_time}&select=*&order=nome.asc`) : Promise.resolve([]), [temporada]);
-  const { data: campos }      = useQuery(() => api.get(`campo?select=*&order=nome.asc`));
+  const { data: campos }      = useQuery(() => temporada?.id_time ? api.get(`campo?id_time=eq.${temporada.id_time}&select=*&order=nome.asc`) : Promise.resolve([]), [temporada]);
   return <ListaPartidas temporada={temporada} onSelect={onSelect} onNova={onNova} adversarios={adversarios} campos={campos} show={show}/>;
 }
 
 // ── FORM NOVA PARTIDA ─────────────────────────────────────────
 function FormNovaPartida({ temporada, onSalvo, onCancelar, readOnly = false }) {
   const { data: adversarios } = useQuery(() => temporada?.id_time ? api.get(`adversario?id_time=eq.${temporada.id_time}&select=*&order=nome.asc`) : Promise.resolve([]), [temporada]);
-  const { data: campos }      = useQuery(() => api.get(`campo?select=*&order=nome.asc`));
+  const { data: campos }      = useQuery(() => temporada?.id_time ? api.get(`campo?id_time=eq.${temporada.id_time}&select=*&order=nome.asc`) : Promise.resolve([]), [temporada]);
   const { data: time }        = useQuery(() => temporada?.id_time ? api.get(`time?id_time=eq.${temporada.id_time}&select=*&limit=1`) : Promise.resolve([]), [temporada]);
 
   const [form, setForm] = useState({ data: "", horario: "14:00", id_adversario: "", em_casa: "S", id_campo: "", observacoes: "" });
@@ -1374,7 +1409,7 @@ function FichaPartida({ partida: p0, onVoltar, readOnly, idTime }) {
   const { toast, show } = useToast();
 
   const { data: jogadores }     = useQuery(() => idTime ? api.get(`jogador?id_jogador=gt.0&id_time=eq.${idTime}&select=*,posicao(nome)&order=camisa.asc`) : Promise.resolve([]), [idTime]);
-  const { data: posicoes }      = useQuery(() => api.get(`posicao?select=*&order=ordem.asc`));
+  const { data: posicoes }      = useQuery(() => meuTipoTime ? api.get(`posicao?id_tipo_time=eq.${meuTipoTime}&select=*&order=ordem.asc`) : Promise.resolve([]), [meuTipoTime]);
   const { data: advsFicha } = useQuery(() => idTime ? api.get(`adversario?id_time=eq.${idTime}&select=id_adversario,nome&order=nome.asc`) : Promise.resolve([]), [idTime]);
   // Meu time: tipo, raio padrão e coordenadas da cidade-sede — usado na busca por raio
   const { data: meuTimeData } = useQuery(() => idTime ? api.get(`time?id_time=eq.${idTime}&select=id_time,id_tipo_time,raio_busca_km,numero_titulares,quantidade_periodos,minutos_padrao_periodo,permite_acrescimos,cidade:id_cidade_sede(nome,estado,latitude,longitude)&limit=1`) : Promise.resolve([]), [idTime]);
@@ -1511,6 +1546,7 @@ function FichaPartida({ partida: p0, onVoltar, readOnly, idTime }) {
         id_time: idTimeP, id_tipo_movimento: tipo.id_tipo_movimento, natureza: tipo.natureza,
         valor: Number(formMovP.valor), data_movimento: formMovP.data_movimento,
         observacao: formMovP.observacao||null, origem:"partida", id_partida: partida.id_partida,
+        registrado_por: emailUsuarioLogado(),
       });
       show("Lançamento adicionado!"); setModalMovP(false); reloadMovsP();
     } catch(e){ show("Erro: "+e.message, "error"); }
@@ -1970,7 +2006,14 @@ function FormEscalacao({ partida, jogadores, posicoes, participacoes, meuTime, o
         <Input label="Camisa" value={form.camisa} onChange={e => set("camisa", e.target.value)} />
         <Select label="Posição" value={form.id_posicao} onChange={e => set("id_posicao", e.target.value)}>
           <option value="">Selecione...</option>
-          {posicoes.filter(p => p.id_posicao_pai).map(p => <option key={p.id_posicao} value={p.id_posicao}>{p.nome}</option>)}
+          {(() => {
+            // IDs que são grupos-pai (têm filhas) — esses não são selecionáveis, só organizam.
+            const idsComFilhas = new Set(posicoes.filter(p => p.id_posicao_pai).map(p => p.id_posicao_pai));
+            // Selecionáveis: posições planas (sem pai e sem filhas) + posições filhas.
+            return posicoes
+              .filter(p => p.id_posicao_pai || !idsComFilhas.has(p.id_posicao))
+              .map(p => <option key={p.id_posicao} value={p.id_posicao}>{p.nome}</option>);
+          })()}
         </Select>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -2187,7 +2230,7 @@ function PaginaInicio({ dados, onNavegar }) {
       icone: "📅",
       menu: "partidas",
       descricao: "Monte o calendário com todos os jogos da temporada.",
-      exemplo: "Ex: Juventus x Trianon — 21/06/2025 14:00",
+      exemplo: "Ex: Nerd do Campo FC x Trianon — 21/06/2025 14:00",
       concluido: (partidas||[]).length > 0,
       obrigatorio: true,
       dica: "Após cadastrar, registre o placar e escalação após cada jogo.",
@@ -2439,6 +2482,7 @@ function CrudMensalidades({ idTime, show, readOnly }) {
           valor: Number(dados.valor_pago), data_movimento: dados.data_pagamento || new Date().toISOString().split("T")[0],
           observacao: `Mensalidade ${String(dados.mes).padStart(2,"0")}/${dados.ano}${nomeJogador?` — ${nomeJogador}`:""}`,
           origem: "mensalidade", id_mensalidade,
+          registrado_por: emailUsuarioLogado(),
         };
         if (temMov) await api.patch(`movimento_caixa?id_mensalidade=eq.${id_mensalidade}`, body);
         else await api.post(`movimento_caixa`, body);
@@ -2811,7 +2855,7 @@ function PaginaAjuda() {
           O manual contém o guia completo do sistema — desde o cadastro inicial
           até o controle de mensalidades. Atualizado para a versão atual.
         </div>
-        <a href="/manual.pdf?v=1.13.10" target="_blank" rel="noopener noreferrer"
+        <a href="/manual.pdf?v=1.13.18" target="_blank" rel="noopener noreferrer"
           style={{ display:"inline-flex", alignItems:"center", gap:10,
             background:C.gold, color:"#0B3D2E", borderRadius:10,
             padding:"14px 28px", fontFamily:"inherit", fontWeight:800,
@@ -3037,6 +3081,7 @@ function CrudCaixa({ idTime, show, readOnly }) {
         Valor: Number(m.valor||0),
         Saldo: a,
         Observação: m.observacao || "",
+        "Lançado por": m.registrado_por || "",
       };
     });
   }
@@ -3090,7 +3135,7 @@ function CrudCaixa({ idTime, show, readOnly }) {
       <td style="color:${l.Tipo==="Receita"?"#2e7d32":"#c62828"}">${l.Tipo}</td>
       <td style="text-align:right">${brl(l.Valor)}</td>
       <td style="text-align:right">${brl(l.Saldo)}</td>
-      <td>${l.Observação}</td></tr>`).join("");
+      <td>${l.Observação}</td><td>${l["Lançado por"]||""}</td></tr>`).join("");
     const periodo = (dataDe||dataAte) ? `Período: ${dataDe?new Date(dataDe+"T12:00:00").toLocaleDateString("pt-BR"):"início"} a ${dataAte?new Date(dataAte+"T12:00:00").toLocaleDateString("pt-BR"):"hoje"}` : "Período: completo";
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Extrato de Caixa</title>
       <style>
@@ -3117,8 +3162,8 @@ function CrudCaixa({ idTime, show, readOnly }) {
       </div>
       <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}><table><thead><tr>
         <th>Data</th><th>Descrição</th><th>Origem</th><th>Tipo</th>
-        <th style="text-align:right">Valor</th><th style="text-align:right">Saldo</th><th>Obs.</th>
-      </tr></thead><tbody>${linhasHtml || '<tr><td colspan="7" style="text-align:center;padding:16px">Nenhum movimento.</td></tr>'}</tbody></table></div>
+        <th style="text-align:right">Valor</th><th style="text-align:right">Saldo</th><th>Obs.</th><th>Lançado por</th>
+      </tr></thead><tbody>${linhasHtml || '<tr><td colspan="8" style="text-align:center;padding:16px">Nenhum movimento.</td></tr>'}</tbody></table></div>
       <div class="assinatura">⚽ Designed by Caxpa Augsten — Nerd do Campo</div>
       </body></html>`;
     const w = window.open("", "_blank");
@@ -3160,7 +3205,7 @@ function CrudCaixa({ idTime, show, readOnly }) {
         <div style={{ marginBottom:12 }}>
           <div style={{ fontSize:10, color:C.dim, textTransform:"uppercase", marginBottom:4 }}>🔍 Buscar na observação/descrição</div>
           <input type="text" value={buscaObs} onChange={e=>setBuscaObs(e.target.value)}
-            placeholder="Ex: maroto sapiranga (traz o que tiver as duas palavras)"
+            placeholder="Ex: nerd campo (traz o que tiver as duas palavras)"
             style={{ width:"100%", background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8, color:C.cream, fontFamily:"inherit", fontSize:13, padding:"9px 12px", outline:"none" }}/>
         </div>
         <div style={{ display:"flex", gap:12, flexWrap:"wrap", alignItems:"flex-end" }}>
@@ -3225,7 +3270,7 @@ function CrudCaixa({ idTime, show, readOnly }) {
         <div style={{ overflowX:"auto" }}>
           <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
             <thead><tr style={{ background:C.surf2 }}>
-              {["Data","Descrição","Origem","Valor", temFiltro?"Acum. (seleção)":"Saldo","Obs."].map(h=>(
+              {["Data","Descrição","Origem","Valor", temFiltro?"Acum. (seleção)":"Saldo","Obs.","Lançado por"].map(h=>(
                 <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontSize:11, color:C.dim, textTransform:"uppercase", fontWeight:700, whiteSpace:"nowrap" }}>{h}</th>
               ))}
             </tr></thead>
@@ -3240,9 +3285,10 @@ function CrudCaixa({ idTime, show, readOnly }) {
                   </td>
                   <td style={{ padding:"10px 14px", fontWeight:700, whiteSpace:"nowrap", color: m.saldoAcc>=0?C.cream:C.loss }}>{fmtMoeda(m.saldoAcc)}</td>
                   <td style={{ padding:"10px 14px", color:C.dim, fontSize:11, maxWidth:160 }}>{m.observacao || "—"}</td>
+                  <td style={{ padding:"10px 14px", color:C.dim, fontSize:11, whiteSpace:"nowrap" }}>{m.registrado_por || "—"}</td>
                 </tr>
               ))}
-              {extrato.length===0 && <tr><td colSpan={6} style={{ padding:24, textAlign:"center", color:C.dim }}>Nenhum movimento registrado.</td></tr>}
+              {extrato.length===0 && <tr><td colSpan={7} style={{ padding:24, textAlign:"center", color:C.dim }}>Nenhum movimento registrado.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -3361,6 +3407,7 @@ function CrudEventos({ idTime, show, readOnly }) {
         id_time: idTime, id_tipo_movimento: tipo.id_tipo_movimento, natureza: tipo.natureza,
         valor: Number(formMov.valor), data_movimento: formMov.data_movimento,
         observacao: formMov.observacao||null, origem:"evento", id_evento: formMov.id_evento,
+        registrado_por: emailUsuarioLogado(),
       });
       show("Lançamento adicionado!"); setFormMov(f=>({ ...f, valor:"", observacao:"" })); reloadMovs();
     } catch(e){ show("Erro: "+e.message, "error"); }
@@ -3579,7 +3626,7 @@ export default function AdminAppCompleto() {
   );
   // Dados para onboarding
   const { data: _cidades }    = useQuery(() => api.get(`cidade?select=id_cidade&limit=1`), [session]);
-  const { data: _campos }     = useQuery(() => api.get(`campo?select=id_campo&limit=1`), [session]);
+  const { data: _campos }     = useQuery(() => idTime ? api.get(`campo?id_time=eq.${idTime}&select=id_campo&limit=1`) : Promise.resolve([]), [session, idTime]);
   const { data: _posicoes }   = useQuery(() => api.get(`posicao?select=id_posicao&limit=1`), [session]);
   const { data: _adversarios } = useQuery(() => idTime ? api.get(`adversario?id_time=eq.${idTime}&select=id_adversario&limit=1`) : Promise.resolve([]), [session, idTime]);
   const { data: _jogadores }  = useQuery(() => idTime ? api.get(`jogador?id_time=eq.${idTime}&id_jogador=gt.0&select=id_jogador&limit=1`) : Promise.resolve([]), [session, idTime]);
@@ -3810,6 +3857,12 @@ export default function AdminAppCompleto() {
           </>)}
         </main>
       </div>
+      <footer style={{ position:"sticky", bottom:0, zIndex:90, background:"#091F15", borderTop:`1px solid ${C.border}`,
+        padding:"8px 20px", textAlign:"center", fontSize:12, color:C.dim, lineHeight:1.4 }}>
+        👥 Seu time pode ter <b style={{color:C.cream}}>vários administradores</b>, cada um com acesso aos módulos que você definir.
+        <span style={{color:C.gold}}> A quantidade de usuários não altera o valor da mensalidade do time.</span>
+        {canEdit("time") && <> Fale com o suporte para adicionar novos acessos.</>}
+      </footer>
     </div>
   );
 }
@@ -3868,16 +3921,20 @@ function TabelaJogadores({ grupo, lista, sk, asc, onSort, onEditar, onInativar, 
 
 function CrudJogadores({ idTime, show, readOnly }) {
   const _idTimeJ = idTime; // recebido por prop (filtrado pelo usuário logado)
+  // Tipo de time, para filtrar as posições disponíveis
+  const { data: _timeInfo } = useQuery(() => _idTimeJ ? api.get(`time?id_time=eq.${_idTimeJ}&select=id_tipo_time&limit=1`) : Promise.resolve([]), [_idTimeJ]);
+  const _tipoTimeJ = _timeInfo?.[0]?.id_tipo_time;
   const { data: jogadores, loading, reload } = useQuery(() => 
     _idTimeJ ? api.get(`jogador?id_jogador=gt.0&id_time=eq.${_idTimeJ}&select=*,posicao(nome,ordem,id_posicao_pai)&order=camisa.asc`) : Promise.resolve([]),
     [_idTimeJ]
   );
-  // Todas as posições (para resolver nome do grupo pai no front) e só as filhas (para o select)
+  // Todas as posições (para resolver nome do grupo pai no front) e só as do tipo (para o select)
   const { data: todasPosicoes } = useQuery(() => api.get(`posicao?select=id_posicao,nome&order=nome.asc`));
   const mapaPosJog = React.useMemo(() => {
     const m = {}; (todasPosicoes||[]).forEach(p => { m[p.id_posicao] = p.nome; }); return m;
   }, [todasPosicoes]);
-  const { data: posicoes } = useQuery(() => api.get(`posicao?id_posicao_pai=not.is.null&select=*&order=nome.asc`));
+  // Posições do tipo de time (inclui planas e filhas; exclui apenas grupos-pai que tenham filhos)
+  const { data: posicoes } = useQuery(() => _tipoTimeJ ? api.get(`posicao?id_tipo_time=eq.${_tipoTimeJ}&select=*&order=ordem.asc,nome.asc`) : Promise.resolve([]), [_tipoTimeJ]);
   const posicoesLista = posicoes || [];
   const [modal, setModal] = useState(null);
   const [form, setForm]   = useState({});
@@ -4021,7 +4078,12 @@ function CrudJogadores({ idTime, show, readOnly }) {
               <Input label="Camisa" value={form.camisa||""} onChange={e => set("camisa", e.target.value)} />
               <Select label="Posição" value={form.id_posicao||""} onChange={e => set("id_posicao", e.target.value)}>
                 <option value="">Selecione...</option>
-                {(posicoes||[]).map(p => <option key={p.id_posicao} value={p.id_posicao}>{p.nome}</option>)}
+                {(() => {
+                  const idsComFilhas = new Set((posicoes||[]).filter(p => p.id_posicao_pai).map(p => p.id_posicao_pai));
+                  return (posicoes||[])
+                    .filter(p => p.id_posicao_pai || !idsComFilhas.has(p.id_posicao))
+                    .map(p => <option key={p.id_posicao} value={p.id_posicao}>{p.nome}</option>);
+                })()}
               </Select>
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
@@ -4045,11 +4107,11 @@ function CrudJogadores({ idTime, show, readOnly }) {
 function CrudAdversarios({ idTime, show, readOnly }) {
   const _idTimeA = idTime; // recebido por prop (filtrado pelo usuário logado)
   const { data: adversarios, loading, reload } = useQuery(() => 
-    _idTimeA ? api.get(`adversario?id_time=eq.${_idTimeA}&select=*,campo(nome),cidade(nome,estado)&order=nome.asc`) : Promise.resolve([]),
+    _idTimeA ? api.get(`adversario?id_time=eq.${_idTimeA}&select=*,campo:id_campo(nome),cidade(nome,estado)&order=nome.asc`) : Promise.resolve([]),
     [_idTimeA]
   );
   const [_sk, _setSk] = useState("nome"); const [_asc, _setAsc] = useState(true);
-  const { data: campos }  = useQuery(() => api.get(`campo?select=*&order=nome.asc`));
+  const { data: campos }  = useQuery(() => _idTimeA ? api.get(`campo?id_time=eq.${_idTimeA}&select=*&order=nome.asc`) : Promise.resolve([]), [_idTimeA]);
   const [ufAdv, setUfAdv] = useState("RS");
   const { data: cidades } = useQuery(() => ufAdv ? api.get(`cidade?estado=eq.${ufAdv}&select=id_cidade,nome,estado&order=nome.asc`) : Promise.resolve([]), [ufAdv]);
   const [modal, setModal]   = useState(null);
@@ -4183,9 +4245,12 @@ function CrudAdversarios({ idTime, show, readOnly }) {
 
 // ── CRUD CAMPOS ───────────────────────────────────────────────
 function CrudCampos({ idTime, show, readOnly }) {
-  const { data: campos, loading, reload } = useQuery(() => api.get(`campo?select=*,cidade(nome,estado)&order=nome.asc`));
+  const { data: campos, loading, reload } = useQuery(() => idTime ? api.get(`campo?id_time=eq.${idTime}&select=*,cidade(nome,estado)&order=nome.asc`) : Promise.resolve([]), [idTime]);
   const [ufCampo, setUfCampo] = useState("RS");
   const { data: cidades } = useQuery(() => ufCampo ? api.get(`cidade?estado=eq.${ufCampo}&select=id_cidade,nome,estado&order=nome.asc`) : Promise.resolve([]), [ufCampo]);
+  // Base nacional completa (para a planilha de referência e validação da importação por nome+UF)
+  const [cidadesBR, setCidadesBR] = useState([]);
+  useEffect(() => { carregarTodasCidades().then(setCidadesBR).catch(()=>{}); }, []);
   const [_sk, _setSk] = useState("nome"); const [_asc, _setAsc] = useState(true);
   const [modal, setModal]   = useState(null);
   const [form, setForm]     = useState({});
@@ -4198,8 +4263,15 @@ function CrudCampos({ idTime, show, readOnly }) {
     setSaving(true);
     try {
       for (const row of resultadoImport._dados) {
-        const cidade = (cidades||[]).find(c => c.nome.toUpperCase() === String(row.cidade||"").trim().toUpperCase());
-        const body = { nome: String(row.nome||"").trim(), endereco: row.endereco||null, id_cidade: cidade?.id_cidade||null };
+        const cidadeNome = String(row.cidade||"").trim().toUpperCase();
+        const ufRow = String(row.uf||"").trim().toUpperCase();
+        let cidade = null;
+        if (cidadeNome) {
+          let cand = (cidadesBR||[]).filter(c => c.nome.toUpperCase() === cidadeNome);
+          if (ufRow) cand = cand.filter(c => (c.estado||"").toUpperCase() === ufRow);
+          cidade = cand[0] || null;
+        }
+        const body = { nome: String(row.nome||"").trim(), endereco: row.endereco||null, id_cidade: cidade?.id_cidade||null, id_time: idTime||null };
         if (row.id_campo) await api.patch(`campo?id_campo=eq.${row.id_campo}`, body);
         else await api.post("campo", body);
       }
@@ -4214,7 +4286,7 @@ function CrudCampos({ idTime, show, readOnly }) {
     if (!form.nome) { show("Nome obrigatório.", "error"); return; }
     setSaving(true);
     try {
-      const body = { nome: form.nome, endereco: form.endereco||null, id_cidade: form.id_cidade?Number(form.id_cidade):null, observacoes: form.observacoes||null };
+      const body = { nome: form.nome, endereco: form.endereco||null, id_cidade: form.id_cidade?Number(form.id_cidade):null, observacoes: form.observacoes||null, id_time: idTime||null };
       if (modal === "novo") await api.post("campo", body);
       else await api.patch(`campo?id_campo=eq.${form.id_campo}`, body);
       show("Salvo!"); setModal(null); reload();
@@ -4228,15 +4300,18 @@ function CrudCampos({ idTime, show, readOnly }) {
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
         <BotoesImportExport
           onExportar={() => exportarExcel(
-            (campos||[]).map(c => ({...c, cidade: c.cidade ? `${c.cidade.nome}` : ""})),
+            (campos||[]).map(c => ({...c, cidade: c.cidade ? `${c.cidade.nome}` : "", uf: c.cidade ? c.cidade.estado : ""})),
             [
               { key:"id_campo",  label:"id",       width:8,  descricao:"NÃO altere. Vazio = novo registro." },
               { key:"nome",      label:"nome",     width:30, descricao:"Nome do campo. OBRIGATÓRIO." },
               { key:"endereco",  label:"endereco", width:40, descricao:"Endereço do campo." },
-              { key:"cidade",    label:"cidade",   width:25, descricao:"Nome exato da cidade cadastrada no sistema." },
+              { key:"uf",        label:"uf",       width:8,  descricao:"Sigla do estado (ex: RS). Ajuda a localizar a cidade certa." },
+              { key:"cidade",    label:"cidade",   width:25, descricao:"Nome da cidade. Consulte a aba 'Cidades' para os nomes válidos." },
             ],
             "campos",
-            ["- id preenchido = atualiza", "- id vazio = cria novo", "- Cidade deve estar cadastrada no sistema"]
+            ["- id preenchido = atualiza", "- id vazio = cria novo", "- Consulte a aba 'Cidades' para ver os nomes válidos", "- Preencha UF + cidade para evitar ambiguidade (ex: duas cidades com o mesmo nome em estados diferentes)"],
+            { nome:"Cidades", colunas:["uf","cidade"], larguras:[8,30],
+              dados:(cidadesBR||[]).map(c => [c.estado, c.nome]) }
           )}
           onImportar={async (file) => {
             setLoadingImport("campos");
@@ -4248,9 +4323,16 @@ function CrudCampos({ idTime, show, readOnly }) {
                 const nome = String(row["nome"]||"").trim();
                 if (!nome) { erros.push({ linha, mensagem: "Campo 'nome' é obrigatório." }); return; }
                 const cidadeNome = String(row["cidade"]||"").trim();
+                const ufRow = String(row["uf"]||"").trim().toUpperCase();
                 if (cidadeNome) {
-                  const cidadeOk = (cidades||[]).find(c => c.nome.toUpperCase() === cidadeNome.toUpperCase());
-                  if (!cidadeOk) erros.push({ linha, mensagem: `Cidade '${cidadeNome}' não encontrada. Cadastre primeiro.` });
+                  // Valida contra a base NACIONAL (não só o UF do dropdown da tela).
+                  let candidatos = (cidadesBR||[]).filter(c => c.nome.toUpperCase() === cidadeNome.toUpperCase());
+                  if (ufRow) candidatos = candidatos.filter(c => (c.estado||"").toUpperCase() === ufRow);
+                  if (candidatos.length === 0) {
+                    erros.push({ linha, mensagem: `Cidade '${cidadeNome}'${ufRow?` (${ufRow})`:""} não encontrada na base. Confira a aba 'Cidades'.` });
+                  } else if (candidatos.length > 1) {
+                    erros.push({ linha, mensagem: `Cidade '${cidadeNome}' existe em mais de um estado. Preencha a coluna 'uf' para indicar qual.` });
+                  }
                 }
                 if (!erros.find(e => e.linha === linha)) validos.push(row);
               });
@@ -4310,8 +4392,13 @@ function CrudCampos({ idTime, show, readOnly }) {
 
 // ── CRUD POSIÇÕES ─────────────────────────────────────────────
 function CrudPosicoes({ idTime, show, readOnly }) {
+  // Tela de CONSULTA: o admin apenas visualiza as posições do tipo do seu time.
+  // A gestão de posições é feita pelo super admin (no cadastro do Tipo de Time).
+  const { data: _timeInfoP } = useQuery(() => idTime ? api.get(`time?id_time=eq.${idTime}&select=id_tipo_time,tipo_time(descricao)&limit=1`) : Promise.resolve([]), [idTime]);
+  const _tipoTimeP = _timeInfoP?.[0]?.id_tipo_time;
+  const _tipoNomeP = _timeInfoP?.[0]?.tipo_time?.descricao;
   const { data: posicoes, loading, reload } = useQuery(() =>
-    api.get(`posicao?select=*&order=ordem.asc,nome.asc`)
+    _tipoTimeP ? api.get(`posicao?id_tipo_time=eq.${_tipoTimeP}&select=*&order=ordem.asc,nome.asc`) : Promise.resolve([]), [_tipoTimeP]
   );
   // Mapa id_posicao → nome, para resolver o grupo pai no front (evita self-join frágil do PostgREST)
   const mapaPosicoes = React.useMemo(() => {
@@ -4367,37 +4454,8 @@ function CrudPosicoes({ idTime, show, readOnly }) {
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
-        <BotoesImportExport
-          onExportar={() => exportarExcel(
-            posicoes||[],
-            [
-              { key:"id_posicao",     label:"id",        width:8,  descricao:"NÃO altere. Vazio = novo." },
-              { key:"nome",           label:"nome",      width:25, descricao:"Nome da posição. OBRIGATÓRIO." },
-              { key:"id_posicao_pai", label:"id_grupo",  width:8,  descricao:"ID do grupo pai. Deixe vazio se for grupo principal." },
-              { key:"ordem",          label:"ordem",     width:8,  descricao:"Ordem de exibição (número)." },
-              { key:"descricao",      label:"descricao", width:40, descricao:"Descrição da posição." },
-            ],
-            "posicoes",
-            ["- Grupos não têm id_grupo", "- Posições específicas devem ter id_grupo preenchido"]
-          )}
-          onImportar={async (file) => {
-            setLoadingImport("posicoes");
-            try {
-              const rows = await lerExcel(file);
-              const erros = []; const validos = [];
-              rows.forEach((row, i) => {
-                const linha = i + 2;
-                const nome = String(row["nome"]||"").trim();
-                if (!nome) erros.push({ linha, mensagem: "Campo 'nome' é obrigatório." });
-                else validos.push(row);
-              });
-              setResultadoImport({ erros, validos: validos.length, mensagem: `${validos.filter(r=>r.id_posicao).length} atualizações + ${validos.filter(r=>!r.id_posicao).length} novos.`, _dados: validos });
-            } catch(e) { show(e.message, "error"); } finally { setLoadingImport(null); }
-          }}
-          loadingImport={loadingImport==="posicoes"}
-        />
-        {!readOnly && <Btn onClick={abrirNovo}>+ Nova Posição</Btn>}
+      <div style={{ background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 14px", fontSize:13, color:C.dim }}>
+        ℹ️ As posições são definidas pelo tipo de time{_tipoNomeP ? <> (<b style={{color:C.cream}}>{_tipoNomeP}</b>)</> : ""} e são iguais para todos os times desse tipo. Esta tela é apenas para consulta. Para alterações, fale com o suporte.
       </div>
       {["Grupos (pai)","Posições detalhadas"].map((titulo, gi) => {
         const lista = gi === 0 ? grupos : filhas;
@@ -4424,8 +4482,7 @@ function CrudPosicoes({ idTime, show, readOnly }) {
                       <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{mapaPosicoes[p.id_posicao_pai] || "—"}</td>
                       <td style={{ padding:"11px 14px", color:C.dim, fontSize:12, whiteSpace:"nowrap" }}>{p.data_fim ? new Date(p.data_fim).toLocaleDateString("pt-BR") : "—"}</td>
                       <td style={{ padding:"11px 14px", display:"flex", gap:8 }}>
-                        {!readOnly && <Btn variant="secondary" style={{ fontSize:11, padding:"5px 10px" }} onClick={() => abrirEditar(p)}>Editar</Btn>}
-                        {!p.data_fim && !readOnly && <Btn variant="danger" style={{ fontSize:11, padding:"5px 10px" }} onClick={() => inativar(p)}>Inativar</Btn>}
+                        {/* Tela de consulta: edição é feita pelo super admin no tipo de time */}
                       </td>
                     </tr>
                   ))}
@@ -4719,19 +4776,23 @@ function CrudTemporadas({ idTime, show, readOnly }) {
 
 // ── CONFIGURAÇÕES DO TIME ─────────────────────────────────────
 function ConfigTime({ idTime, show, readOnly }) {
-  const { data: times, loading, reload } = useQuery(() => idTime ? api.get(`time?id_time=eq.${idTime}&select=*,campo(nome)&limit=1`) : Promise.resolve([]), [idTime]);
-  const { data: campos  } = useQuery(() => api.get(`campo?select=*&order=nome.asc`));
+  const { data: times, loading, reload } = useQuery(() => idTime ? api.get(`time?id_time=eq.${idTime}&select=*&limit=1`) : Promise.resolve([]), [idTime]);
+  const { data: campos  } = useQuery(() => idTime ? api.get(`campo?id_time=eq.${idTime}&select=*&order=nome.asc`) : Promise.resolve([]), [idTime]);
   const [ufSede, setUfSede] = useState("RS");
   const { data: cidades } = useQuery(() => ufSede ? api.get(`cidade?estado=eq.${ufSede}&select=id_cidade,nome,estado&order=nome.asc`) : Promise.resolve([]), [ufSede]);
   const { data: tipos   } = useQuery(() => api.get(`tipo_time?select=*&status=eq.Ativo&order=descricao.asc`));
   const [form, setForm]   = useState(null);
   const [saving, setSaving] = useState(false);
+  const [tipoOriginal, setTipoOriginal] = useState("");
+  const [confirmaTroca, setConfirmaTroca] = useState(null); // {qtdJogadores} quando precisa confirmar troca de tipo
+  const [textoConfirma, setTextoConfirma] = useState("");
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   useEffect(() => {
     if (times?.[0] && !form) {
       const t = times[0];
       setForm({ ...t, id_campo: t.id_campo ? String(t.id_campo) : "", id_cidade_sede: t.id_cidade_sede ? String(t.id_cidade_sede) : "", id_tipo_time: t.id_tipo_time ? String(t.id_tipo_time) : "", data_fundacao: t.data_fundacao ? t.data_fundacao.split("T")[0] : "" });
+      setTipoOriginal(t.id_tipo_time ? String(t.id_tipo_time) : "");
       // Descobre a UF da cidade-sede atual para pré-selecionar o dropdown de estado
       if (t.id_cidade_sede) {
         api.get(`cidade?id_cidade=eq.${t.id_cidade_sede}&select=estado&limit=1`)
@@ -4755,6 +4816,22 @@ function ConfigTime({ idTime, show, readOnly }) {
 
   async function salvar() {
     if (!form?.nome) { show("Nome obrigatório.", "error"); return; }
+    // Detecta troca de tipo de time — operação sensível (zera posições dos jogadores)
+    const tipoMudou = tipoOriginal && form.id_tipo_time && String(form.id_tipo_time) !== String(tipoOriginal);
+    if (tipoMudou && !confirmaTroca) {
+      try {
+        const jogs = await api.get(`jogador?id_jogador=gt.0&id_time=eq.${form.id_time}&id_posicao=not.is.null&select=id_jogador`);
+        setTextoConfirma("");
+        setConfirmaTroca({ qtd: (jogs||[]).length });
+      } catch {
+        setConfirmaTroca({ qtd: 0 });
+      }
+      return; // espera a confirmação; o salvar real acontece em salvarDefinitivo()
+    }
+    await salvarDefinitivo(false);
+  }
+
+  async function salvarDefinitivo(zerarPosicoes) {
     setSaving(true);
     try {
       const body = {
@@ -4778,12 +4855,31 @@ function ConfigTime({ idTime, show, readOnly }) {
         observacoes: form.observacoes||null, publico: form.publico !== false
       };
       await api.patch(`time?id_time=eq.${form.id_time}`, body);
-      show("Configurações salvas!"); reload();
+      // Se trocou o tipo de time: zera a posição dos jogadores (cadastro atual),
+      // preservando o histórico das partidas (participacao não é tocada).
+      if (zerarPosicoes) {
+        try {
+          await api.patch(`jogador?id_time=eq.${form.id_time}&id_jogador=gt.0`, { id_posicao: null });
+          show("Tipo alterado. As posições dos jogadores foram removidas — recadastre-as.");
+        } catch(e) {
+          show("Time salvo, mas houve erro ao limpar posições: " + e.message, "error");
+        }
+      } else {
+        show("Configurações salvas!");
+      }
+      setTipoOriginal(form.id_tipo_time ? String(form.id_tipo_time) : "");
+      setConfirmaTroca(null); setTextoConfirma("");
+      reload();
     } catch (e) { show(e.message, "error"); }
     finally { setSaving(false); }
   }
 
-  if (loading || !form) return <Spinner />;
+  if (loading) return <Spinner />;
+  if (!form) return (
+    <Card style={{ padding:24, textAlign:"center" }}>
+      <div style={{ fontSize:14, color:C.dim }}>Não foi possível carregar os dados do time. Tente recarregar a página.</div>
+    </Card>
+  );
 
   return (
     <Card style={{ padding:24 }}>
@@ -4873,6 +4969,32 @@ function ConfigTime({ idTime, show, readOnly }) {
           <Btn onClick={salvar} disabled={saving || readOnly}>{saving ? "Salvando..." : readOnly ? "Somente Leitura" : "Salvar Configurações"}</Btn>
         </div>
       </div>
+
+      {confirmaTroca && (
+        <Modal title="⚠️ Trocar o tipo de time" onClose={() => { setConfirmaTroca(null); setTextoConfirma(""); }}>
+          <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+            <div style={{ background:`${C.loss}1A`, border:`1px solid ${C.loss}55`, borderRadius:8, padding:"12px 14px", fontSize:14, color:C.cream, lineHeight:1.5 }}>
+              Cada tipo de time tem suas próprias posições. Ao trocar o tipo, <b>a posição de todos os jogadores será removida</b>
+              {confirmaTroca.qtd > 0 ? <> — isso afeta <b>{confirmaTroca.qtd} jogador(es)</b> que têm posição definida.</> : "."}
+              <br/><br/>
+              Você precisará <b>recadastrar a posição de cada jogador</b> com as posições do novo tipo. O histórico das partidas já jogadas é preservado.
+              <br/><br/>
+              <b>Esta ação não pode ser desfeita.</b>
+            </div>
+            <div>
+              <div style={{ fontSize:13, color:C.dim, marginBottom:6 }}>Para confirmar, digite <b style={{color:C.gold}}>TROCAR</b> abaixo:</div>
+              <Input value={textoConfirma} onChange={e => setTextoConfirma(e.target.value)} placeholder="Digite TROCAR"/>
+            </div>
+            <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
+              <Btn variant="secondary" onClick={() => { setConfirmaTroca(null); setTextoConfirma(""); }}>Cancelar</Btn>
+              <Btn variant="danger" disabled={textoConfirma.trim().toUpperCase() !== "TROCAR" || saving}
+                onClick={() => salvarDefinitivo(true)}>
+                {saving ? "Salvando..." : "Confirmar troca e remover posições"}
+              </Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
     </Card>
   );
 }

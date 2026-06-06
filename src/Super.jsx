@@ -420,8 +420,7 @@ function UsuariosTable({ times, reload, show, onPermissoes }) {
 
 // ── FORM NOVO TIME ────────────────────────────────────────────
 function FormNovoTime({ onSalvo, show }) {
-  const { data: campos } = useQuery(() => api.get(`campo?select=*&order=nome.asc`));
-  const [form, setForm] = useState({ nome:"", data_fundacao:"", numero_titulares:"11", quantidade_periodos:"2", minutos_padrao_periodo:"45", permite_acrescimos:"N", tecnico:"", presidente:"", id_campo:"", nivel_mensalidade:"1" });
+  const [form, setForm] = useState({ nome:"", data_fundacao:"", numero_titulares:"11", quantidade_periodos:"2", minutos_padrao_periodo:"45", permite_acrescimos:"N", tecnico:"", presidente:"", nivel_mensalidade:"1" });
   const [saving, setSaving] = useState(false);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
 
@@ -438,7 +437,6 @@ function FormNovoTime({ onSalvo, show }) {
         permite_acrescimos: form.permite_acrescimos,
         tecnico: form.tecnico||null,
         presidente: form.presidente||null,
-        id_campo: form.id_campo?Number(form.id_campo):null,
         nivel_mensalidade: Number(form.nivel_mensalidade)||1,
       });
       // Criar temporada inicial automaticamente
@@ -461,12 +459,8 @@ function FormNovoTime({ onSalvo, show }) {
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
       <Input label="Nome do Time *" value={form.nome} onChange={e=>set("nome",e.target.value)} placeholder="Ex: Flamengo FC Amador"/>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr", gap:12 }}>
         <Input label="Data Fundação" type="date" value={form.data_fundacao} onChange={e=>set("data_fundacao",e.target.value)}/>
-        <Select label="Campo Principal" value={form.id_campo} onChange={e=>set("id_campo",e.target.value)}>
-          <option value="">Selecione...</option>
-          {(campos||[]).map(c=><option key={c.id_campo} value={c.id_campo}>{c.nome}</option>)}
-        </Select>
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(130px, 1fr))", gap:12 }}>
         <Input label="Nº Titulares" type="number" value={form.numero_titulares} onChange={e=>set("numero_titulares",e.target.value)}/>
@@ -789,6 +783,19 @@ function CrudSolicitacoes({ show, onMudou }) {
       //    após falha no vínculo do usuário), reusa em vez de duplicar.
       let id_time = modalSol.id_time_criado || null;
       if (!id_time) {
+        // Buscar os parâmetros padrão do tipo de time escolhido (períodos, titulares etc.)
+        let paramsTipo = {};
+        if (modalSol.id_tipo_time) {
+          try {
+            const tt = await api.get(`tipo_time?id_tipo_time=eq.${modalSol.id_tipo_time}&select=numero_titulares,quantidade_periodos,minutos_padrao_periodo,permite_acrescimos&limit=1`);
+            if (tt?.[0]) paramsTipo = {
+              numero_titulares: tt[0].numero_titulares ?? 11,
+              quantidade_periodos: tt[0].quantidade_periodos ?? 2,
+              minutos_padrao_periodo: tt[0].minutos_padrao_periodo ?? 45,
+              permite_acrescimos: tt[0].permite_acrescimos ?? "S",
+            };
+          } catch {}
+        }
         const timeRes = await api.post(`time`, {
           nome: modalSol.nome_time,
           id_tipo_time: modalSol.id_tipo_time || null,
@@ -797,6 +804,7 @@ function CrudSolicitacoes({ show, onMudou }) {
           id_cidade_sede: modalSol.id_cidade || null,
           raio_busca_km: raioPadrao,
           publico: false,
+          ...paramsTipo,
         });
         // O POST retorna o registro criado (Prefer: return=representation)
         id_time = Array.isArray(timeRes) ? timeRes[0]?.id_time : timeRes?.id_time;
@@ -941,9 +949,7 @@ function CrudSolicitacoes({ show, onMudou }) {
                   ["Time",          modalSol.nome_time],
                   ["Tipo",          modalSol.tipo_time?.descricao || "—"],
                   ["Cidade",        modalSol.cidade || "—"],
-                  ["Campo",         modalSol.campo_principal || "—"],
                   ["Fundação",      modalSol.data_fundacao ? new Date(modalSol.data_fundacao+"T12:00:00").toLocaleDateString("pt-BR") : "—"],
-                  ["Redes Sociais", modalSol.redes_sociais || "—"],
                   ["Responsável",   modalSol.nome_responsavel],
                   ["E-mail",        modalSol.email_responsavel],
                   ["Telefone",      modalSol.telefone],
@@ -1719,7 +1725,7 @@ function AjudaSuper() {
           Guia completo de gestão do sistema: times, mensalidades, solicitações,
           tipos, configurações, permissões e os fluxos do dia a dia.
         </div>
-        <a href="/manual-super.pdf?v=1.13.0" target="_blank" rel="noopener noreferrer"
+        <a href="/manual-super.pdf?v=1.13.18" target="_blank" rel="noopener noreferrer"
           style={{ display:"inline-flex", alignItems:"center", gap:10,
             background:C.gold, color:"#0B3D2E", borderRadius:10,
             padding:"14px 28px", fontFamily:"inherit", fontWeight:800,
@@ -1860,12 +1866,97 @@ function GestaoCidades({ show }) {
 // ══════════════════════════════════════════════════════════════
 // CRUD TIPOS DE TIME
 // ══════════════════════════════════════════════════════════════
+function GestaoPosicoesTipo({ tipo, show, onClose }) {
+  const { data: posicoes, loading, reload } = useQuery(() => api.get(`posicao?id_tipo_time=eq.${tipo.id_tipo_time}&select=*&order=ordem.asc,nome.asc`), [tipo]);
+  const [form, setForm] = useState(null); // {nome, ordem, id_posicao_pai, descricao} ou null
+  const [saving, setSaving] = useState(false);
+  const lista = posicoes || [];
+  const grupos = lista.filter(p => !p.id_posicao_pai);
+
+  function abrirNovo() { setForm({ nome:"", ordem:"", id_posicao_pai:"", descricao:"" }); }
+  function abrirEditar(p) { setForm({ ...p, id_posicao_pai: p.id_posicao_pai ? String(p.id_posicao_pai) : "", ordem: p.ordem ?? "" }); }
+
+  async function salvar() {
+    if (!form.nome?.trim()) { show("Informe o nome da posição."); return; }
+    setSaving(true);
+    try {
+      const body = {
+        nome: form.nome.trim(),
+        descricao: form.descricao || null,
+        ordem: form.ordem !== "" ? Number(form.ordem) : null,
+        id_posicao_pai: form.id_posicao_pai ? Number(form.id_posicao_pai) : null,
+        id_tipo_time: tipo.id_tipo_time,
+      };
+      if (form.id_posicao) await api.patch(`posicao?id_posicao=eq.${form.id_posicao}`, body);
+      else await api.post(`posicao`, body);
+      show("Posição salva!"); setForm(null); reload();
+    } catch(e) { show("Erro: " + e.message); }
+    finally { setSaving(false); }
+  }
+
+  async function excluir(p) {
+    if (!confirm(`Excluir a posição "${p.nome}"? Jogadores que a usam ficarão sem posição.`)) return;
+    try { await api.delete(`posicao?id_posicao=eq.${p.id_posicao}`); show("Posição excluída."); reload(); }
+    catch(e) { show("Erro ao excluir: " + e.message); }
+  }
+
+  return (
+    <Modal title={`Posições — ${tipo.descricao}`} onClose={onClose}>
+      <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+        <div style={{ fontSize:13, color:C.dim }}>
+          Defina as posições disponíveis para times do tipo <b style={{color:C.cream}}>{tipo.descricao}</b>.
+          Você pode criar posições simples (planas) ou agrupá-las indicando um grupo (posição-pai).
+        </div>
+        {loading ? <Spinner/> : (
+          <div style={{ border:`1px solid ${C.border}`, borderRadius:8, overflow:"hidden" }}>
+            {lista.length === 0 && <div style={{ padding:16, textAlign:"center", color:C.dim, fontSize:13 }}>Nenhuma posição cadastrada para este tipo.</div>}
+            {lista.map(p => (
+              <div key={p.id_posicao} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"8px 12px", borderBottom:`1px solid ${C.border}` }}>
+                <div style={{ fontSize:13, color:C.cream }}>
+                  {p.id_posicao_pai && <span style={{ color:C.dim }}>↳ </span>}
+                  {p.nome}
+                  {p.ordem != null && <span style={{ color:C.dim, fontSize:11 }}> (ordem {p.ordem})</span>}
+                </div>
+                <div style={{ display:"flex", gap:6 }}>
+                  <Btn variant="secondary" style={{ fontSize:11, padding:"3px 8px" }} onClick={() => abrirEditar(p)}>Editar</Btn>
+                  <Btn variant="secondary" style={{ fontSize:11, padding:"3px 8px", color:C.loss }} onClick={() => excluir(p)}>Excluir</Btn>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {form ? (
+          <div style={{ border:`1px solid ${C.gold}`, borderRadius:8, padding:12, display:"flex", flexDirection:"column", gap:10 }}>
+            <div style={{ fontSize:12, fontWeight:700, color:C.gold, textTransform:"uppercase" }}>{form.id_posicao ? "Editar posição" : "Nova posição"}</div>
+            <Input label="Nome *" value={form.nome} onChange={e => setForm(f => ({...f, nome:e.target.value}))} placeholder="Ex: Goleiro, Fixo, Ala, Pivô"/>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+              <Input label="Ordem" type="number" value={form.ordem} onChange={e => setForm(f => ({...f, ordem:e.target.value}))} placeholder="Ex: 1"/>
+              <Select label="Grupo (opcional)" value={form.id_posicao_pai} onChange={e => setForm(f => ({...f, id_posicao_pai:e.target.value}))}>
+                <option value="">Sem grupo (plana)</option>
+                {grupos.filter(g => g.id_posicao !== form.id_posicao).map(g => <option key={g.id_posicao} value={g.id_posicao}>{g.nome}</option>)}
+              </Select>
+            </div>
+            <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
+              <Btn variant="secondary" onClick={() => setForm(null)}>Cancelar</Btn>
+              <Btn onClick={salvar} disabled={saving}>{saving ? "Salvando..." : "Salvar posição"}</Btn>
+            </div>
+          </div>
+        ) : (
+          <Btn onClick={abrirNovo}>+ Nova posição</Btn>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 function CrudTipoTime({ show }) {
   const { data: tipos, loading, reload } = useQuery(() => api.get(`tipo_time?select=*&order=id_tipo_time.asc`));
   const { toast } = useToast();
   const [modal, setModal] = useState(null);
   const [form, setForm]   = useState({});
   const [saving, setSaving] = useState(false);
+  const [gerenciarPos, setGerenciarPos] = useState(null); // tipo cujo gerenciador de posições está aberto
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
@@ -1939,6 +2030,7 @@ function CrudTipoTime({ show }) {
                 <td style={{ padding:"13px 16px", color:C.dim }}>{t.permite_acrescimos==="S" ? "Sim" : "Não"}</td>
                 <td style={{ padding:"13px 16px", display:"flex", gap:8 }}>
                   <Btn variant="secondary" style={{ fontSize:11, padding:"5px 10px" }} onClick={() => abrirEditar(t)}>Editar</Btn>
+                  <Btn variant="secondary" style={{ fontSize:11, padding:"5px 10px", color:C.gold }} onClick={() => setGerenciarPos(t)}>⚽ Posições</Btn>
                   <Btn variant="secondary" style={{ fontSize:11, padding:"5px 10px", color: t.status==="Ativo" ? C.loss : C.win }} onClick={() => alterarStatus(t)}>
                     {t.status==="Ativo" ? "Inativar" : "Ativar"}
                   </Btn>
@@ -1983,13 +2075,17 @@ function CrudTipoTime({ show }) {
           </div>
         </Modal>
       )}
+
+      {gerenciarPos && (
+        <GestaoPosicoesTipo tipo={gerenciarPos} show={show} onClose={() => setGerenciarPos(null)} />
+      )}
     </div>
   );
 }
 
 export default function SuperApp() {
   const [session, setSession] = useState(SESSION_TOKEN ? {access_token: SESSION_TOKEN} : null);
-  const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.11";
+  const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.18";
 
   if (!session) return <LoginSuper onLogin={setSession}/>;
 
