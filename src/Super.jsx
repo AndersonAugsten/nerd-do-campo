@@ -374,6 +374,7 @@ function UsuariosTable({ times, reload, show, onPermissoes }) {
   const { data: vinculos, loading, reload: reloadVinculos } = useQuery(() =>
     api.post(`rpc/listar_usuarios_time`, {})
   );
+  const [filtroEmail, setFiltroEmail] = useState("");
 
   async function revogar(id) {
     if (!confirm("Revogar acesso deste usuário?")) return;
@@ -384,12 +385,26 @@ function UsuariosTable({ times, reload, show, onPermissoes }) {
   if (loading) return <Spinner/>;
 
   return (
-    <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}><table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
+    <div>
+      <div style={{ marginBottom:14 }}>
+        <input
+          value={filtroEmail}
+          onChange={e => setFiltroEmail(e.target.value)}
+          placeholder="🔍 Filtrar por e-mail (para descobrir de qual time é o usuário)"
+          style={{ width:"100%", maxWidth:420, background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8, color:C.cream, fontFamily:"inherit", fontSize:14, padding:"10px 14px", outline:"none" }}
+        />
+        {filtroEmail && (
+          <span style={{ marginLeft:12, fontSize:12, color:C.dim }}>
+            {(vinculos||[]).filter(v => (v.email||"").toLowerCase().includes(filtroEmail.toLowerCase())).length} resultado(s)
+          </span>
+        )}
+      </div>
+      <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}><table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
       <thead><tr style={{ background:C.surf2 }}>
         {["E-mail","Último Acesso","Time","Role","Criado em","Ações"].map(h => <th key={h} style={{ padding:"10px 16px", textAlign:"left", fontSize:11, color:C.dim, textTransform:"uppercase", letterSpacing:"0.06em", fontWeight:700 }}>{h}</th>)}
       </tr></thead>
       <tbody>
-        {(vinculos||[]).map((v,i) => (
+        {(vinculos||[]).filter(v => !filtroEmail || (v.email||"").toLowerCase().includes(filtroEmail.toLowerCase())).map((v,i) => (
           <tr key={v.id} style={{ background:i%2===0?C.surface:C.bg }}>
             <td style={{ padding:"12px 16px", color:C.cream, fontSize:13 }}>{v.email || v.user_id?.substring(0,8)+"..."}</td>
             <td style={{ padding:"12px 16px", color:C.dim, fontSize:12 }}>{v.last_sign_in_at ? new Date(v.last_sign_in_at).toLocaleDateString("pt-BR") : "Nunca"}</td>
@@ -415,6 +430,7 @@ function UsuariosTable({ times, reload, show, onPermissoes }) {
         ))}
       </tbody>
     </table></div>
+    </div>
   );
 }
 
@@ -529,7 +545,7 @@ function FormNovoAdmin({ time, onSalvo, show }) {
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
           {[
             { label:"Time", value: vinculado.time, cor: C.cream },
-            { label:"URL",  value: "nerd-do-campo.vercel.app/admin", cor: C.gold },
+            { label:"URL",  value: `${typeof window !== "undefined" ? window.location.origin : "https://nerddocampo.com.br"}/admin`, cor: C.gold },
             { label:"E-mail", value: vinculado.email, cor: C.cream },
           ].map(item => (
             <div key={item.label} style={{ display:"flex", justifyContent:"space-between", padding:"10px 14px", background:C.surf2, borderRadius:8 }}>
@@ -2085,7 +2101,7 @@ function CrudTipoTime({ show }) {
 
 export default function SuperApp() {
   const [session, setSession] = useState(SESSION_TOKEN ? {access_token: SESSION_TOKEN} : null);
-  const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.20";
+  const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.21";
 
   if (!session) return <LoginSuper onLogin={setSession}/>;
 
