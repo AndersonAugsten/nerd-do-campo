@@ -1,4 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+
+const C = {
+  bg:      "#0B3D2E", surface: "#103D2A", surf2: "#174D36",
+  border:  "#1F5C3E", gold: "#E8A020",    cream: "#F0E8D0",
+  dim:     "#8FAF9A", win: "#4CAF50",     loss: "#E53935",
+  draw:    "#E8A020",
+};
+
 const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.21";
 const UFS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 // Distância em km entre dois pontos (lat/long) — fórmula de Haversine
@@ -935,12 +943,7 @@ function ThSortable({ colKey, sortKey, asc, onSort, children }) {
 
 
 
-const C = {
-  bg:      "#0B3D2E", surface: "#103D2A", surf2: "#174D36",
-  border:  "#1F5C3E", gold: "#E8A020",    cream: "#F0E8D0",
-  dim:     "#8FAF9A", win: "#4CAF50",     loss: "#E53935",
-  draw:    "#E8A020",
-};
+
 
 // ── Atoms ─────────────────────────────────────────────────────
 const f = (tag, base) => ({ children, style: s = {}, ...p }) =>
