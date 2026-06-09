@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.29";
+const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.30";
 const UFS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 
 // Paleta de cores do sistema — declarada no topo para evitar "Cannot access 'C' before initialization"
@@ -3654,6 +3654,14 @@ export default function AdminAppCompleto() {
     [session, idTime]
   );
 
+  // Flag de turma fechada — query simples na tipo_time (sem embedding, evita
+  // ambiguidade de FK). Fica aqui junto dos demais hooks, ANTES de returns condicionais.
+  const _idTipoTime = times?.[0]?.id_tipo_time;
+  const { data: _tipoDoTime } = useQuery(() =>
+    _idTipoTime ? api.get(`tipo_time?id_tipo_time=eq.${_idTipoTime}&select=eh_turma_fechada&limit=1`) : Promise.resolve([]),
+    [_idTipoTime]
+  );
+
   const { data: permissoesRaw } = useQuery(() =>
     session?.user?.id && idTime
       ? api.get(`usuario_permissao?user_id=eq.${session.user.id}&id_time=eq.${idTime}&select=*`)
@@ -3747,12 +3755,6 @@ export default function AdminAppCompleto() {
   }
 
   const time = times?.[0];
-  // Busca a flag de turma fechada direto na tabela tipo_time (query simples,
-  // sem embedding — evita ambiguidade de FK, já que 'time' tem 2 FKs p/ tipo_time).
-  const { data: _tipoDoTime } = useQuery(
-    () => time?.id_tipo_time ? api.get(`tipo_time?id_tipo_time=eq.${time.id_tipo_time}&select=eh_turma_fechada&limit=1`) : Promise.resolve([]),
-    [time?.id_tipo_time]
-  );
   const ehTurmaFechada = !!_tipoDoTime?.[0]?.eh_turma_fechada;
 
   function navMenu(id) { setMenu(id); setPartida(null); setNovaPartida(false); }
