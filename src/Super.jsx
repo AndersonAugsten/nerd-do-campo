@@ -756,7 +756,7 @@ function ModalPermissoes({ user_id, id_time, nomeUsuario, onClose, show }) {
 // ══════════════════════════════════════════════════════════════
 function CrudSolicitacoes({ show, onMudou }) {
   const { data: solicitacoes, reload } = useQuery(() =>
-    api.get(`solicitacao_time?select=*,tipo_time(descricao)&order=criado_em.desc`)
+    api.get(`solicitacao_time?select=*,tipo_time!id_tipo_time(descricao)&order=criado_em.desc`)
   );
   const { data: tipos } = useQuery(() => api.get(`tipo_time?select=*&status=eq.Ativo&order=descricao.asc`));
   const [modalSol, setModalSol] = useState(null);
@@ -2101,7 +2101,7 @@ function CrudTipoTime({ show }) {
 
 export default function SuperApp() {
   const [session, setSession] = useState(SESSION_TOKEN ? {access_token: SESSION_TOKEN} : null);
-  const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.27";
+  const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.28";
 
   if (!session) return <LoginSuper onLogin={setSession}/>;
 

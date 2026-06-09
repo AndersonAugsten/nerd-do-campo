@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.27";
+const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.28";
 const UFS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 
 // Paleta de cores do sistema — declarada no topo para evitar "Cannot access 'C' before initialization"
@@ -3650,7 +3650,7 @@ export default function AdminAppCompleto() {
   }, [session]);
 
   const { data: times }      = useQuery(() => 
-    idTime ? api.get(`time?id_time=eq.${idTime}&select=*,tipo_time(eh_turma_fechada)&limit=1`) : Promise.resolve([]),
+    idTime ? api.get(`time?id_time=eq.${idTime}&select=*,tipo_time!id_tipo_time(eh_turma_fechada)&limit=1`) : Promise.resolve([]),
     [session, idTime]
   );
 
@@ -3753,7 +3753,11 @@ export default function AdminAppCompleto() {
   // Menu base + item de Times Internos (só para turma fechada). Aditivo: times tradicionais não veem.
   const MENU_COM_TURMA = ehTurmaFechada
     ? (() => {
-        const base = MENU_BASE.map(m => m.id === "partidas" ? { ...m, label:"Encontros", icon:"📋" } : m);
+        // Turma fechada: remove Adversários (não há adversário externo),
+        // renomeia Partidas→Encontros e adiciona Times Internos.
+        const base = MENU_BASE
+          .filter(m => m.id !== "adversarios")
+          .map(m => m.id === "partidas" ? { ...m, label:"Encontros", icon:"📋" } : m);
         const idx = base.findIndex(m => m.id === "jogadores");
         const item = { id:"times_internos", label:"Times Internos", icon:"🧡", grupo:"Cadastros" };
         if (idx >= 0) base.splice(idx + 1, 0, item); else base.push(item);
@@ -4863,7 +4867,7 @@ function PresencaEncontro({ idEncontro, parts, jogadores, timesInternos, mapaTI,
 function CrudPosicoes({ idTime, show, readOnly }) {
   // Tela de CONSULTA: o admin apenas visualiza as posições do tipo do seu time.
   // A gestão de posições é feita pelo super admin (no cadastro do Tipo de Time).
-  const { data: _timeInfoP } = useQuery(() => idTime ? api.get(`time?id_time=eq.${idTime}&select=id_tipo_time,tipo_time(descricao)&limit=1`) : Promise.resolve([]), [idTime]);
+  const { data: _timeInfoP } = useQuery(() => idTime ? api.get(`time?id_time=eq.${idTime}&select=id_tipo_time,tipo_time!id_tipo_time(descricao)&limit=1`) : Promise.resolve([]), [idTime]);
   const _tipoTimeP = _timeInfoP?.[0]?.id_tipo_time;
   const _tipoNomeP = _timeInfoP?.[0]?.tipo_time?.descricao;
   const { data: posicoes, loading, reload } = useQuery(() =>

@@ -116,7 +116,7 @@ function SeletorTimes({ onSelect }) {
   const [dataRef, setDataRef] = useState(""); // vazio = sem filtro de data
   const [modalCadastro, setModalCadastro] = useState(false);
 
-  const { data: allTimes, loading } = useQuery(() => sb(`time?select=*,temporada(id_temporada,nome,data_inicio,data_fim,publico),tipo_time(id_tipo_time,descricao),cidade:id_cidade_sede(nome,estado),campo:id_campo(nome)&publico=eq.true&order=nome.asc`));
+  const { data: allTimes, loading } = useQuery(() => sb(`time?select=*,temporada(id_temporada,nome,data_inicio,data_fim,publico),tipo_time!id_tipo_time(id_tipo_time,descricao),cidade:id_cidade_sede(nome,estado),campo:id_campo(nome)&publico=eq.true&order=nome.asc`));
   const { data: tiposAtivos } = useQuery(() => sb(`tipo_time?select=*&status=eq.Ativo&order=descricao.asc`));
   const { data: configSistema } = useQuery(() => sb(`config_sistema?chave=eq.cadastro_time_ativo&select=valor&limit=1`));
   const cadastroAtivo = ["true","1"].includes(String(configSistema?.[0]?.valor ?? "").trim().toLowerCase());
@@ -891,7 +891,7 @@ const UFS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG"
 
 function ModalSolicitacao({ onClose }) {
   const [form, setForm] = useState({
-    nome_time:"", id_tipo_time:"", data_fundacao:"", cidade:"", id_cidade:"",
+    nome_time:"", id_tipo_time:"", id_subtipo:"", data_fundacao:"", cidade:"", id_cidade:"",
     nome_responsavel:"", email_responsavel:"", telefone:"",
   });
   const [uf, setUf] = useState("RS"); // RS é o padrão (público inicial)
@@ -911,6 +911,10 @@ function ModalSolicitacao({ onClose }) {
     if (!form.email_responsavel.trim())  return "E-mail é obrigatório.";
     if (!/\S+@\S+\.\S+/.test(form.email_responsavel)) return "E-mail inválido.";
     if (!form.telefone.trim())           return "Telefone é obrigatório.";
+    {
+      const tipoSel = (tipos||[]).find(t => String(t.id_tipo_time) === String(form.id_tipo_time));
+      if (tipoSel?.eh_turma_fechada && !form.id_subtipo) return "Escolha a modalidade da turma (subtipo).";
+    }
     return "";
   }
 
@@ -924,6 +928,7 @@ function ModalSolicitacao({ onClose }) {
       const body = {
         nome_time:          form.nome_time.trim(),
         id_tipo_time:       form.id_tipo_time ? Number(form.id_tipo_time) : null,
+        id_subtipo:         form.id_subtipo ? Number(form.id_subtipo) : null,
         data_fundacao:      form.data_fundacao || null,
         cidade:             cidadeTexto,
         id_cidade:          form.id_cidade ? Number(form.id_cidade) : null,
@@ -993,12 +998,29 @@ function ModalSolicitacao({ onClose }) {
 
             <div>
               <div style={{ fontSize:11, color:C.dim, marginBottom:4 }}>Tipo de Time</div>
-              <select value={form.id_tipo_time} onChange={e => set("id_tipo_time", e.target.value)}
+              <select value={form.id_tipo_time} onChange={e => { set("id_tipo_time", e.target.value); set("id_subtipo", ""); }}
                 style={{ width:"100%", background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8, color:C.cream, fontFamily:"inherit", fontSize:14, padding:"10px 12px" }}>
                 <option value="">Selecione...</option>
                 {(tipos||[]).map(t => <option key={t.id_tipo_time} value={t.id_tipo_time}>{t.descricao}</option>)}
               </select>
             </div>
+
+            {(() => {
+              const tipoSel = (tipos||[]).find(t => String(t.id_tipo_time) === String(form.id_tipo_time));
+              if (!tipoSel?.eh_turma_fechada) return null;
+              const subtipos = (tipos||[]).filter(t => !t.eh_turma_fechada);
+              return (
+                <div>
+                  <div style={{ fontSize:11, color:C.dim, marginBottom:4 }}>Modalidade da turma (subtipo)</div>
+                  <select value={form.id_subtipo||""} onChange={e => set("id_subtipo", e.target.value)}
+                    style={{ width:"100%", background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8, color:C.cream, fontFamily:"inherit", fontSize:14, padding:"10px 12px" }}>
+                    <option value="">Selecione a modalidade...</option>
+                    {subtipos.map(t => <option key={t.id_tipo_time} value={t.id_tipo_time}>{t.descricao}</option>)}
+                  </select>
+                  <div style={{ fontSize:11, color:C.dim, marginTop:4 }}>Turma fechada usa os parâmetros (titulares, posições) da modalidade escolhida.</div>
+                </div>
+              );
+            })()}
 
             <div style={{ display:"grid", gridTemplateColumns:"110px 1fr", gap:12 }}>
               <div>
