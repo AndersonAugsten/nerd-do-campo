@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.31";
+const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.33";
 const UFS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 
 // Paleta de cores do sistema — declarada no topo para evitar "Cannot access 'C' before initialization"
@@ -4495,7 +4495,30 @@ function CrudTimesInternos({ idTime, show, readOnly }) {
   const [modal, setModal]   = useState(null);
   const [form, setForm]     = useState({});
   const [saving, setSaving] = useState(false);
+  const [loadingImport, setLoadingImport] = useState(null);
+  const [resultadoImport, setResultadoImport] = useState(null);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  async function confirmarImport() {
+    const dados = resultadoImport?._dados || [];
+    setSaving(true);
+    try {
+      for (const row of dados) {
+        const body = {
+          nome: String(row["nome"]||"").trim(),
+          cor: String(row["cor"]||"").trim() || null,
+          data_inicio: row["data_inicio"] || null,
+          data_fim: row["data_fim"] || null,
+          observacao: String(row["observacao"]||"").trim() || null,
+          id_time: idTime,
+        };
+        if (row["id"]) await api.patch(`time_interno?id_time_interno=eq.${row["id"]}`, body);
+        else await api.post("time_interno", body);
+      }
+      show("Importação concluída!"); setResultadoImport(null); reload();
+    } catch (e) { show(e.message, "error"); } finally { setSaving(false); }
+  }
+
 
   function abrirNovo() { setForm({ nome:"", cor:"#E8A020", data_inicio:"", data_fim:"", observacao:"" }); setModal("novo"); }
   function abrirEditar(t) {
@@ -4533,8 +4556,40 @@ function CrudTimesInternos({ idTime, show, readOnly }) {
     <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
         <div style={{ fontSize:12, color:C.dim }}>Times internos da turma. Só os ativos (sem data de encerramento) aparecem ao montar um jogo.</div>
-        {!readOnly && <Btn onClick={abrirNovo}>+ Novo Time Interno</Btn>}
+        <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+          <BotoesImportExport
+            onExportar={() => exportarExcel(
+              (times||[]),
+              [
+                { key:"id_time_interno", label:"id",          width:8,  descricao:"NÃO altere. Vazio = novo." },
+                { key:"nome",            label:"nome",        width:25, descricao:"Nome do time interno. OBRIGATÓRIO." },
+                { key:"cor",             label:"cor",         width:12, descricao:"Cor em hex, ex: #E8A020." },
+                { key:"data_inicio",     label:"data_inicio", width:14, descricao:"Data de início (AAAA-MM-DD)." },
+                { key:"data_fim",        label:"data_fim",    width:14, descricao:"Data de encerramento (vazio = ativo)." },
+                { key:"observacao",      label:"observacao",  width:30, descricao:"Observações." },
+              ],
+              "times_internos",
+              ["- id preenchido = atualiza", "- id vazio = cria novo", "- nome é obrigatório"]
+            )}
+            onImportar={async (file) => {
+              setLoadingImport("ti");
+              try {
+                const rows = await lerExcel(file);
+                const erros = []; const validos = [];
+                rows.forEach((row, i) => {
+                  const linha = i + 2;
+                  if (!String(row["nome"]||"").trim()) { erros.push({ linha, mensagem: "Campo 'nome' é obrigatório." }); return; }
+                  validos.push(row);
+                });
+                setResultadoImport({ erros, validos: validos.length, mensagem: `${validos.filter(r=>r["id"]).length} atualizações + ${validos.filter(r=>!r["id"]).length} novos.`, _dados: validos });
+              } catch(e) { show(e.message, "error"); } finally { setLoadingImport(null); }
+            }}
+            loadingImport={loadingImport==="ti"}
+          />
+          {!readOnly && <Btn onClick={abrirNovo}>+ Novo Time Interno</Btn>}
+        </div>
       </div>
+      <ModalImportacao resultado={resultadoImport} onClose={() => setResultadoImport(null)} onConfirmar={confirmarImport} salvando={saving}/>
       <Card style={{ padding:0, overflow:"hidden" }}>
         <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}><table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
           <thead><tr style={{ background:C.surf2 }}>
@@ -4719,6 +4774,50 @@ function FichaEncontro({ idTime, temporada, encontro, show, readOnly, onVoltar }
 function JogosEncontro({ idEncontro, jogos, timesInternos, mapaTI, reload, show, readOnly, totalPlacares }) {
   const [form, setForm] = useState({ a:"", b:"", pa:"0", pb:"0" });
   const [saving, setSaving] = useState(false);
+  const [loadingImport, setLoadingImport] = useState(null);
+  const [resultadoImport, setResultadoImport] = useState(null);
+
+  function exportarJogosFn() {
+    const dados = (jogos||[]).map(j => ({
+      id_encontro_jogo: j.id_encontro_jogo,
+      time_a: mapaTI[j.id_time_interno_a]?.nome || "", placar_a: j.placar_a||0,
+      placar_b: j.placar_b||0, time_b: mapaTI[j.id_time_interno_b]?.nome || "",
+      ordem: j.ordem||"", observacao: j.observacao||"",
+    }));
+    exportarExcel(dados, [
+      { key:"id_encontro_jogo", label:"id",       width:8,  descricao:"NÃO altere. Vazio = novo jogo." },
+      { key:"time_a",   label:"time_a",   width:16, descricao:"Nome exato do time interno A." },
+      { key:"placar_a", label:"placar_a", width:10, descricao:"Gols do time A." },
+      { key:"placar_b", label:"placar_b", width:10, descricao:"Gols do time B." },
+      { key:"time_b",   label:"time_b",   width:16, descricao:"Nome exato do time interno B." },
+      { key:"ordem",    label:"ordem",    width:8,  descricao:"Ordem do jogo no dia (opcional)." },
+      { key:"observacao", label:"observacao", width:30, descricao:"Observações." },
+    ], "jogos_encontro",
+    ["- time_a e time_b devem ser nomes exatos de times internos ativos.",
+     "- id preenchido atualiza; vazio cria novo jogo.", "- placares são números."]);
+  }
+
+  async function confirmarImport() {
+    const dados = resultadoImport?._dados || [];
+    setSaving(true);
+    try {
+      for (const row of dados) {
+        const na = String(row["time_a"]||"").trim().toUpperCase();
+        const nb = String(row["time_b"]||"").trim().toUpperCase();
+        const ta = (timesInternos||[]).find(t => t.nome.toUpperCase() === na);
+        const tb = (timesInternos||[]).find(t => t.nome.toUpperCase() === nb);
+        if (!ta || !tb) continue;
+        const body = {
+          id_encontro: idEncontro, id_time_interno_a: ta.id_time_interno, id_time_interno_b: tb.id_time_interno,
+          placar_a: Number(row["placar_a"])||0, placar_b: Number(row["placar_b"])||0,
+          ordem: row["ordem"] ? Number(row["ordem"]) : null, observacao: String(row["observacao"]||"").trim()||null,
+        };
+        if (row["id"]) await api.patch(`encontro_jogo?id_encontro_jogo=eq.${row["id"]}`, body);
+        else await api.post("encontro_jogo", body);
+      }
+      show("Jogos importados!"); setResultadoImport(null); reload();
+    } catch (e) { show(e.message, "error"); } finally { setSaving(false); }
+  }
 
   async function addJogo() {
     if (!form.a || !form.b) { show("Selecione os dois times internos.", "error"); return; }
@@ -4737,7 +4836,35 @@ function JogosEncontro({ idEncontro, jogos, timesInternos, mapaTI, reload, show,
 
   return (
     <Card>
-      <div style={{ fontSize:13, color:C.gold, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700, marginBottom:14 }}>Jogos do dia (rodízio)</div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8, marginBottom:14 }}>
+        <div style={{ fontSize:13, color:C.gold, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700 }}>Jogos do dia (rodízio)</div>
+        {!readOnly && (
+          <BotoesImportExport
+            onExportar={exportarJogosFn}
+            onImportar={async (file) => {
+              setLoadingImport("jogos");
+              try {
+                const rows = await lerExcel(file);
+                const erros = []; let validos = 0;
+                const tiNomes = new Set((timesInternos||[]).map(t => t.nome.toUpperCase()));
+                rows.forEach((row, i) => {
+                  const linha = i + 2;
+                  const na = String(row["time_a"]||"").trim().toUpperCase();
+                  const nb = String(row["time_b"]||"").trim().toUpperCase();
+                  if (!na || !nb) { erros.push({ linha, mensagem: "time_a e time_b são obrigatórios." }); return; }
+                  if (!tiNomes.has(na)) { erros.push({ linha, mensagem: `Time '${row["time_a"]}' não encontrado.` }); return; }
+                  if (!tiNomes.has(nb)) { erros.push({ linha, mensagem: `Time '${row["time_b"]}' não encontrado.` }); return; }
+                  if (na === nb) { erros.push({ linha, mensagem: "Os dois times devem ser diferentes." }); return; }
+                  validos++;
+                });
+                setResultadoImport({ erros, validos, mensagem: `${validos} jogo(s) a importar.`, _dados: rows });
+              } catch(e) { show(e.message, "error"); } finally { setLoadingImport(null); }
+            }}
+            loadingImport={loadingImport==="jogos"}
+          />
+        )}
+      </div>
+      <ModalImportacao resultado={resultadoImport} onClose={() => setResultadoImport(null)} onConfirmar={confirmarImport} salvando={saving}/>
       {jogos.map(j => (
         <div key={j.id_encontro_jogo} style={{ display:"flex", alignItems:"center", gap:8, background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 12px", marginBottom:6 }}>
           <span style={{ display:"inline-block", width:12, height:12, borderRadius:"50%", background:mapaTI[j.id_time_interno_a]?.cor||C.dim }} />
@@ -4773,8 +4900,61 @@ function JogosEncontro({ idEncontro, jogos, timesInternos, mapaTI, reload, show,
 function PresencaEncontro({ idEncontro, parts, jogadores, timesInternos, mapaTI, reload, show, readOnly, totais, statusAtual }) {
   const [addJog, setAddJog] = useState("");
   const [saving, setSaving] = useState(false);
+  const [loadingImport, setLoadingImport] = useState(null);
+  const [resultadoImport, setResultadoImport] = useState(null);
   const jaPresentes = new Set((parts||[]).map(p => p.id_jogador));
   const disponiveis = (jogadores||[]).filter(j => !jaPresentes.has(j.id_jogador));
+
+  // Exporta as estatísticas do dia (com nome do jogador e do time interno resolvidos)
+  function exportarStats() {
+    const dados = (parts||[]).map(p => ({
+      id_jogador: p.id_jogador,
+      jogador: p.jogador?.apelido || p.jogador?.nome || "",
+      camisa: p.jogador?.camisa || "",
+      time_interno: mapaTI[p.id_time_interno]?.nome || "",
+      gols: p.gols||0, assistencias: p.assistencias||0, gols_contra: p.gols_contra||0,
+      amarelos: p.cartao_amarelo||0, vermelhos: p.cartao_vermelho||0, observacao: p.observacao||"",
+    }));
+    exportarExcel(dados, [
+      { key:"id_jogador",   label:"id_jogador",   width:10, descricao:"NÃO altere. Identifica o jogador." },
+      { key:"jogador",      label:"jogador",      width:22, descricao:"Nome (referência; não altere)." },
+      { key:"camisa",       label:"camisa",       width:8,  descricao:"Camisa (referência)." },
+      { key:"time_interno", label:"time_interno", width:16, descricao:"Nome EXATO do time interno do jogador no dia." },
+      { key:"gols",         label:"gols",         width:8,  descricao:"Gols no dia." },
+      { key:"assistencias", label:"assistencias", width:12, descricao:"Assistências no dia." },
+      { key:"gols_contra",  label:"gols_contra",  width:12, descricao:"Gols contra no dia." },
+      { key:"amarelos",     label:"amarelos",     width:10, descricao:"Cartões amarelos." },
+      { key:"vermelhos",    label:"vermelhos",    width:10, descricao:"Cartões vermelhos." },
+      { key:"observacao",   label:"observacao",   width:30, descricao:"Observações." },
+    ], "estatisticas_encontro",
+    ["- Exporte com os presentes já adicionados, preencha os números e reimporte.",
+     "- 'time_interno' deve ser o nome exato de um time interno ativo.",
+     "- Linhas com id_jogador em branco são ignoradas."]);
+  }
+
+  async function confirmarImport() {
+    const dados = resultadoImport?._dados || [];
+    setSaving(true);
+    try {
+      for (const row of dados) {
+        const idJog = Number(row["id_jogador"]); if (!idJog) continue;
+        const tiNome = String(row["time_interno"]||"").trim().toUpperCase();
+        const ti = (timesInternos||[]).find(t => t.nome.toUpperCase() === tiNome);
+        const existente = (parts||[]).find(p => p.id_jogador === idJog);
+        const body = {
+          id_encontro: idEncontro, id_jogador: idJog,
+          id_time_interno: ti ? ti.id_time_interno : (existente?.id_time_interno || null),
+          gols: Number(row["gols"])||0, assistencias: Number(row["assistencias"])||0,
+          gols_contra: Number(row["gols_contra"])||0, cartao_amarelo: Number(row["amarelos"])||0,
+          cartao_vermelho: Number(row["vermelhos"])||0, observacao: String(row["observacao"]||"").trim()||null,
+        };
+        if (existente) await api.patch(`encontro_participacao?id_encontro_part=eq.${existente.id_encontro_part}`, body);
+        else await api.post("encontro_participacao", body);
+      }
+      show("Estatísticas importadas!"); setResultadoImport(null); reload();
+    } catch (e) { show(e.message, "error"); } finally { setSaving(false); }
+  }
+
 
   async function adicionarPresenca() {
     if (!addJog) return;
@@ -4808,7 +4988,32 @@ function PresencaEncontro({ idEncontro, parts, jogadores, timesInternos, mapaTI,
 
   return (
     <Card>
-      <div style={{ fontSize:13, color:C.gold, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700, marginBottom:14 }}>Presença e estatísticas do dia</div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8, marginBottom:14 }}>
+        <div style={{ fontSize:13, color:C.gold, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700 }}>Presença e estatísticas do dia</div>
+        {!readOnly && (
+          <BotoesImportExport
+            onExportar={exportarStats}
+            onImportar={async (file) => {
+              setLoadingImport("stats");
+              try {
+                const rows = await lerExcel(file);
+                const erros = []; let validos = 0;
+                const tiNomes = new Set((timesInternos||[]).map(t => t.nome.toUpperCase()));
+                rows.forEach((row, i) => {
+                  const linha = i + 2;
+                  if (!Number(row["id_jogador"])) return; // ignora linha sem jogador
+                  const ti = String(row["time_interno"]||"").trim().toUpperCase();
+                  if (ti && !tiNomes.has(ti)) { erros.push({ linha, mensagem: `Time interno '${row["time_interno"]}' não encontrado.` }); return; }
+                  validos++;
+                });
+                setResultadoImport({ erros, validos, mensagem: `${validos} jogador(es) com estatísticas a importar.`, _dados: rows.filter(r => Number(r["id_jogador"])) });
+              } catch(e) { show(e.message, "error"); } finally { setLoadingImport(null); }
+            }}
+            loadingImport={loadingImport==="stats"}
+          />
+        )}
+      </div>
+      <ModalImportacao resultado={resultadoImport} onClose={() => setResultadoImport(null)} onConfirmar={confirmarImport} salvando={saving}/>
       <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}><table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
         <thead><tr style={{ background:C.surf2 }}>
           {["Jogador","Time interno","Gols","Assist.","G.Contra","🟨","🟥",""].map(h => <th key={h} style={{ padding:"7px 8px", textAlign:"left", fontSize:10, color:C.dim, textTransform:"uppercase", fontWeight:700 }}>{h}</th>)}

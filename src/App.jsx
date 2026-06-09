@@ -281,7 +281,152 @@ function SeletorTimes({ onSelect }) {
 }
 
 // ── VISÃO GERAL ───────────────────────────────────────────────
+// Visão pública de uma TURMA FECHADA (aproveitamento dos times internos,
+// artilharia, assistências, presença, eficiência, goleadas).
+function VisaoGeralTurma({ temporada }) {
+  const tid = temporada.id_temporada;
+  const { data: aprov, loading: l1 } = useQuery(() => sb(`vw_turma_aproveitamento?id_temporada=eq.${tid}&select=*&order=aproveitamento.desc,gols_pro.desc`), [tid]);
+  const { data: jogs, loading: l2 }  = useQuery(() => sb(`vw_turma_jogador?id_temporada=eq.${tid}&select=*`), [tid]);
+  const { data: goleadas }           = useQuery(() => sb(`vw_turma_goleadas?id_temporada=eq.${tid}&select=*&order=diferenca.desc,total_gols.desc&limit=5`), [tid]);
+
+  if (l1 || l2) return <Spinner />;
+
+  const lista = (jogs || []);
+  const artilheiros = [...lista].filter(j => (j.gols||0) > 0).sort((a,b) => b.gols - a.gols).slice(0, 10);
+  const assistentes = [...lista].filter(j => (j.assistencias||0) > 0).sort((a,b) => b.assistencias - a.assistencias).slice(0, 10);
+  const presenca    = [...lista].sort((a,b) => b.presencas - a.presencas).slice(0, 10);
+  const eficiencia  = [...lista].filter(j => (j.presencas||0) >= 1 && (j.gols||0) > 0).sort((a,b) => (b.media_gols||0) - (a.media_gols||0)).slice(0, 10);
+  const nomeJog = j => j.apelido || j.nome || "?";
+  const medalha = i => i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i+1}`;
+
+  const SecTitle = ({ children }) => (
+    <div style={{ fontSize:13, fontWeight:800, color:C.gold, textTransform:"uppercase", letterSpacing:"0.08em", margin:"22px 0 12px" }}>{children}</div>
+  );
+  const RankTable = ({ cols, rows }) => (
+    <Card style={{ padding:0, overflow:"hidden" }}>
+      <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}><table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+        <thead><tr style={{ background:C.surf2 }}>{cols.map((c,i) => <th key={i} style={{ padding:"8px 10px", textAlign: i===0?"center":"left", fontSize:10, color:C.dim, textTransform:"uppercase", fontWeight:700 }}>{c}</th>)}</tr></thead>
+        <tbody>{rows}</tbody>
+      </table></div>
+    </Card>
+  );
+
+  if (lista.length === 0 && (aprov||[]).length === 0) {
+    return <Card><div style={{ padding:24, textAlign:"center", color:C.dim }}>Ainda não há encontros registrados nesta temporada.</div></Card>;
+  }
+
+  return (
+    <div>
+      {/* Aproveitamento dos times internos */}
+      <SecTitle>🏆 Aproveitamento dos times internos</SecTitle>
+      <Card style={{ padding:0, overflow:"hidden" }}>
+        <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}><table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+          <thead><tr style={{ background:C.surf2 }}>
+            {["Time","J","V","E","D","Gols","Aprov."].map((h,i) => <th key={i} style={{ padding:"8px 10px", textAlign:i===0?"left":"center", fontSize:10, color:C.dim, textTransform:"uppercase", fontWeight:700 }}>{h}</th>)}
+          </tr></thead>
+          <tbody>
+            {(aprov||[]).map(t => (
+              <tr key={t.id_time_interno} style={{ borderBottom:`1px solid ${C.border}` }}>
+                <td style={{ padding:"9px 10px", fontWeight:700 }}>
+                  <span style={{ display:"inline-block", width:12, height:12, borderRadius:"50%", background:t.cor||C.dim, marginRight:8, verticalAlign:"middle", border:`1px solid ${C.border}` }} />{t.nome}
+                </td>
+                <td style={{ padding:"9px 10px", textAlign:"center" }}>{t.jogos}</td>
+                <td style={{ padding:"9px 10px", textAlign:"center", color:C.win }}>{t.vitorias}</td>
+                <td style={{ padding:"9px 10px", textAlign:"center" }}>{t.empates}</td>
+                <td style={{ padding:"9px 10px", textAlign:"center", color:C.loss }}>{t.derrotas}</td>
+                <td style={{ padding:"9px 10px", textAlign:"center", color:C.dim }}>{t.gols_pro}:{t.gols_contra}</td>
+                <td style={{ padding:"9px 10px", textAlign:"center", fontWeight:800, color:C.gold }}>{t.aproveitamento}%</td>
+              </tr>
+            ))}
+          </tbody>
+        </table></div>
+      </Card>
+
+      {/* Artilheiros */}
+      {artilheiros.length > 0 && (<>
+        <SecTitle>⚽ Artilheiros</SecTitle>
+        <RankTable cols={["#","Jogador","Gols","Presenças"]} rows={artilheiros.map((j,i) => (
+          <tr key={j.id_jogador} style={{ borderBottom:`1px solid ${C.border}` }}>
+            <td style={{ padding:"8px 10px", textAlign:"center", fontWeight:800, color:C.gold }}>{medalha(i)}</td>
+            <td style={{ padding:"8px 10px", fontWeight:700 }}>{nomeJog(j)}</td>
+            <td style={{ padding:"8px 10px" }}>{j.gols}</td>
+            <td style={{ padding:"8px 10px", color:C.dim }}>{j.presencas}</td>
+          </tr>
+        ))} />
+      </>)}
+
+      {/* Assistências */}
+      {assistentes.length > 0 && (<>
+        <SecTitle>🅰️ Assistências</SecTitle>
+        <RankTable cols={["#","Jogador","Assist.","Presenças"]} rows={assistentes.map((j,i) => (
+          <tr key={j.id_jogador} style={{ borderBottom:`1px solid ${C.border}` }}>
+            <td style={{ padding:"8px 10px", textAlign:"center", fontWeight:800, color:C.gold }}>{medalha(i)}</td>
+            <td style={{ padding:"8px 10px", fontWeight:700 }}>{nomeJog(j)}</td>
+            <td style={{ padding:"8px 10px" }}>{j.assistencias}</td>
+            <td style={{ padding:"8px 10px", color:C.dim }}>{j.presencas}</td>
+          </tr>
+        ))} />
+      </>)}
+
+      {/* Presença */}
+      {presenca.length > 0 && (<>
+        <SecTitle>📅 Ranking de presença</SecTitle>
+        <RankTable cols={["#","Jogador","Presenças"]} rows={presenca.map((j,i) => (
+          <tr key={j.id_jogador} style={{ borderBottom:`1px solid ${C.border}` }}>
+            <td style={{ padding:"8px 10px", textAlign:"center", fontWeight:800, color:C.gold }}>{medalha(i)}</td>
+            <td style={{ padding:"8px 10px", fontWeight:700 }}>{nomeJog(j)}</td>
+            <td style={{ padding:"8px 10px" }}>{j.presencas}</td>
+          </tr>
+        ))} />
+      </>)}
+
+      {/* Eficiência */}
+      {eficiencia.length > 0 && (<>
+        <SecTitle>🎯 Média de gols por presença</SecTitle>
+        <RankTable cols={["#","Jogador","Gols","Pres.","Média"]} rows={eficiencia.map((j,i) => (
+          <tr key={j.id_jogador} style={{ borderBottom:`1px solid ${C.border}` }}>
+            <td style={{ padding:"8px 10px", textAlign:"center", fontWeight:800, color:C.gold }}>{medalha(i)}</td>
+            <td style={{ padding:"8px 10px", fontWeight:700 }}>{nomeJog(j)}</td>
+            <td style={{ padding:"8px 10px" }}>{j.gols}</td>
+            <td style={{ padding:"8px 10px", color:C.dim }}>{j.presencas}</td>
+            <td style={{ padding:"8px 10px", fontWeight:800, color:C.gold }}>{j.media_gols}</td>
+          </tr>
+        ))} />
+      </>)}
+
+      {/* Goleadas */}
+      {(goleadas||[]).length > 0 && (<>
+        <SecTitle>💥 Placares marcantes</SecTitle>
+        <Card>
+          {(goleadas||[]).map(g => (
+            <div key={g.id_encontro_jogo} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 0", borderBottom:`1px solid ${C.border}`, fontSize:13 }}>
+              <span style={{ display:"inline-block", width:11, height:11, borderRadius:"50%", background:g.cor_a||C.dim }} />
+              <span>{g.nome_a}</span>
+              <span style={{ fontWeight:800, color:C.gold }}>{g.placar_a} × {g.placar_b}</span>
+              <span>{g.nome_b}</span>
+              <span style={{ display:"inline-block", width:11, height:11, borderRadius:"50%", background:g.cor_b||C.dim }} />
+              <span style={{ marginLeft:"auto", fontSize:11, color:C.dim }}>{g.data ? new Date(g.data).toLocaleDateString("pt-BR") : ""}</span>
+            </div>
+          ))}
+        </Card>
+      </>)}
+    </div>
+  );
+}
+
 function VisaoGeral({ temporada }) {
+  // Detecta se o time desta temporada é turma fechada → delega para a visão própria.
+  const { data: _tdt } = useQuery(
+    () => temporada?.id_time ? sb(`time?id_time=eq.${temporada.id_time}&select=id_tipo_time&limit=1`) : Promise.resolve([]),
+    [temporada?.id_time]
+  );
+  const _idTipo = _tdt?.[0]?.id_tipo_time;
+  const { data: _tt } = useQuery(
+    () => _idTipo ? sb(`tipo_time?id_tipo_time=eq.${_idTipo}&select=eh_turma_fechada&limit=1`) : Promise.resolve([]),
+    [_idTipo]
+  );
+  const ehTurma = !!_tt?.[0]?.eh_turma_fechada;
+
   const { data: partidas, loading } = useQuery(
     () => sb(`partida?id_temporada=eq.${temporada.id_temporada}&select=*,adversario(nome),campo:id_campo(nome)&order=data.asc`),
     [temporada.id_temporada]
@@ -289,6 +434,7 @@ function VisaoGeral({ temporada }) {
   const { data: topGols }   = useQuery(() => sb(`vw_stats_temporada?id_temporada=eq.${temporada.id_temporada}&select=*&order=gols_marcados.desc&limit=5`), [temporada.id_temporada]);
   const { data: topAssist } = useQuery(() => sb(`vw_stats_temporada?id_temporada=eq.${temporada.id_temporada}&select=*&order=assistencias.desc&limit=5`), [temporada.id_temporada]);
 
+  if (ehTurma) return <VisaoGeralTurma temporada={temporada} />;
   if (loading) return <Spinner />;
 
   const jogadas = (partidas||[]).filter(p => p.cancelada !== "S" && p.gols_marcados !== null);
