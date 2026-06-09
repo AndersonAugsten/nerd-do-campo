@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.28";
+const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.29";
 const UFS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 
 // Paleta de cores do sistema — declarada no topo para evitar "Cannot access 'C' before initialization"
@@ -3650,7 +3650,7 @@ export default function AdminAppCompleto() {
   }, [session]);
 
   const { data: times }      = useQuery(() => 
-    idTime ? api.get(`time?id_time=eq.${idTime}&select=*,tipo_time!id_tipo_time(eh_turma_fechada)&limit=1`) : Promise.resolve([]),
+    idTime ? api.get(`time?id_time=eq.${idTime}&select=*&limit=1`) : Promise.resolve([]),
     [session, idTime]
   );
 
@@ -3747,7 +3747,13 @@ export default function AdminAppCompleto() {
   }
 
   const time = times?.[0];
-  const ehTurmaFechada = !!time?.tipo_time?.eh_turma_fechada;
+  // Busca a flag de turma fechada direto na tabela tipo_time (query simples,
+  // sem embedding — evita ambiguidade de FK, já que 'time' tem 2 FKs p/ tipo_time).
+  const { data: _tipoDoTime } = useQuery(
+    () => time?.id_tipo_time ? api.get(`tipo_time?id_tipo_time=eq.${time.id_tipo_time}&select=eh_turma_fechada&limit=1`) : Promise.resolve([]),
+    [time?.id_tipo_time]
+  );
+  const ehTurmaFechada = !!_tipoDoTime?.[0]?.eh_turma_fechada;
 
   function navMenu(id) { setMenu(id); setPartida(null); setNovaPartida(false); }
   // Menu base + item de Times Internos (só para turma fechada). Aditivo: times tradicionais não veem.
