@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.39";
+const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.41";
 const UFS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 
 // Paleta de cores do sistema — declarada no topo para evitar "Cannot access 'C' before initialization"
@@ -55,6 +55,7 @@ const URL  = process.env.REACT_APP_SUPABASE_URL || "https://nxztffulmvohduvudbhg
 const ANON = process.env.REACT_APP_SUPABASE_ANON || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im54enRmZnVsbXZvaGR1dnVkYmhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODY5ODMsImV4cCI6MjA5NTA2Mjk4M30.CwEmjukApMTJhkbKh1jlp4Q-IYrM26u-5SYx9p20nsg";
 
 let SESSION_TOKEN = sessionStorage.getItem("ndc_token") || null;
+let REFRESH_TOKEN = sessionStorage.getItem("ndc_refresh") || null;
 
 // Extrai o e-mail do usuário logado a partir do token JWT (payload base64).
 // Usado para registrar quem lançou cada movimento de caixa.
@@ -77,7 +78,30 @@ async function sbAuth(path, body) {
   return res.json();
 }
 
-async function sb(path, opts = {}) {
+// Renova o access_token usando o refresh_token. Retorna true se renovou.
+async function renovarToken() {
+  if (!REFRESH_TOKEN) return false;
+  try {
+    const res = await sbAuth("token?grant_type=refresh_token", { refresh_token: REFRESH_TOKEN });
+    if (res?.access_token) {
+      SESSION_TOKEN = res.access_token;
+      sessionStorage.setItem("ndc_token", res.access_token);
+      if (res.refresh_token) { REFRESH_TOKEN = res.refresh_token; sessionStorage.setItem("ndc_refresh", res.refresh_token); }
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
+// Limpa a sessão e força relogin (chamado quando o refresh falha).
+function encerrarSessao() {
+  SESSION_TOKEN = null; REFRESH_TOKEN = null;
+  sessionStorage.removeItem("ndc_token");
+  sessionStorage.removeItem("ndc_refresh");
+  window.dispatchEvent(new CustomEvent("ndc-sessao-expirada"));
+}
+
+async function sb(path, opts = {}, _jaTentou = false) {
   const headers = {
     apikey: ANON,
     Authorization: `Bearer ${SESSION_TOKEN || ANON}`,
@@ -86,6 +110,12 @@ async function sb(path, opts = {}) {
     ...opts.headers,
   };
   const res = await fetch(`${URL}/rest/v1/${path}`, { headers, ...opts });
+  if (res.status === 401 && !_jaTentou && SESSION_TOKEN) {
+    const renovou = await renovarToken();
+    if (renovou) return sb(path, opts, true);
+    encerrarSessao();
+    throw new Error("Sua sessão expirou. Faça login novamente.");
+  }
   if (!res.ok) { const e = await res.text(); throw new Error(e); }
   const txt = await res.text();
   return txt ? JSON.parse(txt) : null;
@@ -1084,10 +1114,10 @@ function Badge({ label, cor }) {
 }
 
 // ── LOGIN ─────────────────────────────────────────────────────
-function Login({ onLogin }) {
+function Login({ onLogin, aviso }) {
   const [email, setEmail]   = useState("");
   const [senha, setSenha]   = useState("");
-  const [erro, setErro]     = useState("");
+  const [erro, setErro]     = useState(aviso || "");
   const [loading, setLoading] = useState(false);
   const [modalRecuperar, setModalRecuperar] = useState(false);
   const [emailRec, setEmailRec] = useState("");
@@ -1101,6 +1131,7 @@ function Login({ onLogin }) {
     if (res.access_token) {
       SESSION_TOKEN = res.access_token;
       sessionStorage.setItem("ndc_token", res.access_token);
+      if (res.refresh_token) { REFRESH_TOKEN = res.refresh_token; sessionStorage.setItem("ndc_refresh", res.refresh_token); }
       onLogin(res);
     }
     else setErro("E-mail ou senha incorretos.");
@@ -3647,10 +3678,17 @@ function CrudEventos({ idTime, show, readOnly }) {
 
 export default function AdminAppCompleto() {
   const [session, setSession]       = useState(SESSION_TOKEN ? {access_token: SESSION_TOKEN} : null);
+  const [sessaoExpirou, setSessaoExpirou] = useState(false);
   const [idTime, setIdTime]         = useState(null);
   const [timeInativo, setTimeInativo] = useState(false);
   const [isSuperadmin, setIsSuperadmin] = useState(false);
   const [menu, setMenu] = useState("inicio");
+
+  useEffect(() => {
+    const handler = () => { setSessaoExpirou(true); setSession(null); };
+    window.addEventListener("ndc-sessao-expirada", handler);
+    return () => window.removeEventListener("ndc-sessao-expirada", handler);
+  }, []);
 
   const [partida, setPartida]   = useState(null);
   const [novaPartida, setNovaPartida] = useState(false);
@@ -3769,7 +3807,7 @@ export default function AdminAppCompleto() {
     );
   }
 
-  if (!session) return <Login onLogin={setSession} />;
+  if (!session) return <Login onLogin={(r) => { setSessaoExpirou(false); setSession(r); }} aviso={sessaoExpirou ? "Sua sessão expirou. Faça login novamente." : ""} />;
 
   // Bloqueio de time inativo
   if (timeInativo) {
@@ -3785,7 +3823,7 @@ export default function AdminAppCompleto() {
           <div style={{ fontSize:13, color:C.gold, fontWeight:700, marginBottom:24 }}>
             nerddocampo10@gmail.com
           </div>
-          <button onClick={() => { SESSION_TOKEN=null; sessionStorage.removeItem("ndc_token"); setSession(null); setTimeInativo(false); }}
+          <button onClick={() => { SESSION_TOKEN=null; REFRESH_TOKEN=null; sessionStorage.removeItem("ndc_token"); sessionStorage.removeItem("ndc_refresh"); setSession(null); setTimeInativo(false); }}
             style={{ background:C.gold, color:"#0B3D2E", border:"none", borderRadius:10, padding:"12px 32px", fontFamily:"inherit", fontWeight:800, fontSize:14, cursor:"pointer", textTransform:"uppercase" }}>
             Sair
           </button>
@@ -3860,7 +3898,7 @@ export default function AdminAppCompleto() {
               {(temporadas||[]).map(t=><option key={t.id_temporada} value={t.id_temporada}>{t.nome}</option>)}
             </select>
           )}
-          <Btn variant="danger" style={{ fontSize:11, padding:"6px 12px" }} onClick={() => { SESSION_TOKEN=null; sessionStorage.removeItem("ndc_token"); setSession(null); }}>Sair</Btn>
+          <Btn variant="danger" style={{ fontSize:11, padding:"6px 12px" }} onClick={() => { SESSION_TOKEN=null; REFRESH_TOKEN=null; sessionStorage.removeItem("ndc_token"); sessionStorage.removeItem("ndc_refresh"); setSession(null); }}>Sair</Btn>
         </div>
       </header>
 

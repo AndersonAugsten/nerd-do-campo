@@ -5,6 +5,7 @@ const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL || "https://nxztffulmvoh
 const SUPABASE_KEY = process.env.REACT_APP_SUPABASE_ANON || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im54enRmZnVsbXZvaGR1dnVkYmhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODY5ODMsImV4cCI6MjA5NTA2Mjk4M30.CwEmjukApMTJhkbKh1jlp4Q-IYrM26u-5SYx9p20nsg";
 
 let SESSION_TOKEN = sessionStorage.getItem("ndc_super_token") || null;
+let REFRESH_TOKEN = sessionStorage.getItem("ndc_super_refresh") || null;
 
 const UFS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 
@@ -17,7 +18,30 @@ async function sbAuth(path, body) {
   return res.json();
 }
 
-async function sb(path, opts = {}) {
+// Renova o access_token usando o refresh_token. Retorna true se renovou.
+async function renovarToken() {
+  if (!REFRESH_TOKEN) return false;
+  try {
+    const res = await sbAuth("token?grant_type=refresh_token", { refresh_token: REFRESH_TOKEN });
+    if (res?.access_token) {
+      SESSION_TOKEN = res.access_token;
+      sessionStorage.setItem("ndc_super_token", res.access_token);
+      if (res.refresh_token) { REFRESH_TOKEN = res.refresh_token; sessionStorage.setItem("ndc_super_refresh", res.refresh_token); }
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
+// Limpa a sessão e força relogin (chamado quando o refresh falha).
+function encerrarSessao() {
+  SESSION_TOKEN = null; REFRESH_TOKEN = null;
+  sessionStorage.removeItem("ndc_super_token");
+  sessionStorage.removeItem("ndc_super_refresh");
+  window.dispatchEvent(new CustomEvent("ndc-sessao-expirada"));
+}
+
+async function sb(path, opts = {}, _jaTentou = false) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     headers: {
       apikey: SUPABASE_KEY,
@@ -28,6 +52,13 @@ async function sb(path, opts = {}) {
     },
     ...opts,
   });
+  // Token expirado: tenta renovar UMA vez e repete a chamada.
+  if (res.status === 401 && !_jaTentou && SESSION_TOKEN) {
+    const renovou = await renovarToken();
+    if (renovou) return sb(path, opts, true);
+    encerrarSessao();
+    throw new Error("Sua sessão expirou. Faça login novamente.");
+  }
   if (!res.ok) { const e = await res.text(); throw new Error(e); }
   const txt = await res.text();
   return txt ? JSON.parse(txt) : null;
@@ -154,10 +185,10 @@ function BadgePendentes() {
   );
 }
 
-function LoginSuper({ onLogin }) {
+function LoginSuper({ onLogin, aviso }) {
   const [email, setEmail]   = useState("");
   const [senha, setSenha]   = useState("");
-  const [erro, setErro]     = useState("");
+  const [erro, setErro]     = useState(aviso || "");
   const [loading, setLoading] = useState(false);
 
   async function handleLogin() {
@@ -167,6 +198,7 @@ function LoginSuper({ onLogin }) {
     if (res.access_token) {
       SESSION_TOKEN = res.access_token;
       sessionStorage.setItem("ndc_super_token", res.access_token);
+      if (res.refresh_token) { REFRESH_TOKEN = res.refresh_token; sessionStorage.setItem("ndc_super_refresh", res.refresh_token); }
       // Verificar se é superadmin
       try {
         const check = await api.get(`usuario_time?user_id=eq.${res.user.id}&role=eq.superadmin`);
@@ -756,7 +788,7 @@ function ModalPermissoes({ user_id, id_time, nomeUsuario, onClose, show }) {
 // ══════════════════════════════════════════════════════════════
 function CrudSolicitacoes({ show, onMudou }) {
   const { data: solicitacoes, reload } = useQuery(() =>
-    api.get(`solicitacao_time?select=*,tipo_time!id_tipo_time(descricao),subtipo:id_subtipo(descricao)&order=criado_em.desc`)
+    api.get(`solicitacao_time?select=*,tipo_time!id_tipo_time(descricao)&order=criado_em.desc`)
   );
   const { data: tipos } = useQuery(() => api.get(`tipo_time?select=*&status=eq.Ativo&order=descricao.asc`));
   const [modalSol, setModalSol] = useState(null);
@@ -967,7 +999,7 @@ function CrudSolicitacoes({ show, onMudou }) {
                 {[
                   ["Time",          modalSol.nome_time],
                   ["Tipo",          modalSol.tipo_time?.descricao || "—"],
-                  ...(modalSol.subtipo?.descricao ? [["Modalidade (subtipo)", modalSol.subtipo.descricao]] : []),
+                  ...(modalSol.id_subtipo ? [["Modalidade (subtipo)", (tipos||[]).find(t => String(t.id_tipo_time) === String(modalSol.id_subtipo))?.descricao || "—"]] : []),
                   ["Cidade",        modalSol.cidade || "—"],
                   ["Fundação",      modalSol.data_fundacao ? new Date(modalSol.data_fundacao+"T12:00:00").toLocaleDateString("pt-BR") : "—"],
                   ["Responsável",   modalSol.nome_responsavel],
@@ -2110,9 +2142,16 @@ function CrudTipoTime({ show }) {
 
 export default function SuperApp() {
   const [session, setSession] = useState(SESSION_TOKEN ? {access_token: SESSION_TOKEN} : null);
-  const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.39";
+  const [sessaoExpirou, setSessaoExpirou] = useState(false);
+  const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.41";
 
-  if (!session) return <LoginSuper onLogin={setSession}/>;
+  useEffect(() => {
+    const handler = () => { setSessaoExpirou(true); setSession(null); };
+    window.addEventListener("ndc-sessao-expirada", handler);
+    return () => window.removeEventListener("ndc-sessao-expirada", handler);
+  }, []);
+
+  if (!session) return <LoginSuper onLogin={(r) => { setSessaoExpirou(false); setSession(r); }} aviso={sessaoExpirou ? "Sua sessão expirou. Faça login novamente." : ""}/>;
 
   return (
     <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"'Oswald','Arial Narrow',Arial,sans-serif", color:C.cream }}>
@@ -2126,7 +2165,7 @@ export default function SuperApp() {
         )}
         <div style={{ fontSize:10, color:C.dim }}>v{APP_VERSION}</div>
         <div style={{ marginLeft:"auto" }}>
-          <Btn variant="danger" style={{ fontSize:11, padding:"6px 12px" }} onClick={()=>{ SESSION_TOKEN=null; sessionStorage.removeItem("ndc_super_token"); setSession(null); }}>Sair</Btn>
+          <Btn variant="danger" style={{ fontSize:11, padding:"6px 12px" }} onClick={()=>{ SESSION_TOKEN=null; REFRESH_TOKEN=null; sessionStorage.removeItem("ndc_super_token"); sessionStorage.removeItem("ndc_super_refresh"); setSession(null); }}>Sair</Btn>
         </div>
       </header>
       <main style={{ maxWidth:1100, margin:"0 auto", padding:"28px 24px" }}>
