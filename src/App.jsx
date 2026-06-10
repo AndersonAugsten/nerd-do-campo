@@ -1041,6 +1041,7 @@ function ModalSolicitacao({ onClose }) {
     nome_responsavel:"", email_responsavel:"", telefone:"",
   });
   const [uf, setUf] = useState("RS"); // RS é o padrão (público inicial)
+  const [modoJogo, setModoJogo] = useState(null); // null | "enfrenta" | "entre_si" — define como o time joga
   const [step, setStep]     = useState(1); // 1=dados, 2=confirmação
   const [saving, setSaving] = useState(false);
   const [enviado, setEnviado] = useState(false);
@@ -1058,8 +1059,10 @@ function ModalSolicitacao({ onClose }) {
     if (!/\S+@\S+\.\S+/.test(form.email_responsavel)) return "E-mail inválido.";
     if (!form.telefone.trim())           return "Telefone é obrigatório.";
     {
+      if (!modoJogo) return "Escolha como seu time joga.";
+      if (!form.id_tipo_time) return "Escolha a modalidade.";
       const tipoSel = (tipos||[]).find(t => String(t.id_tipo_time) === String(form.id_tipo_time));
-      if (tipoSel?.eh_turma_fechada && !form.id_subtipo) return "Escolha a modalidade da turma (subtipo).";
+      if (tipoSel?.eh_turma_fechada && !form.id_subtipo) return "Escolha a modalidade da turma (futsal, society, etc.).";
     }
     return "";
   }
@@ -1142,31 +1145,66 @@ function ModalSolicitacao({ onClose }) {
                 style={{ width:"100%", background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8, color:C.cream, fontFamily:"inherit", fontSize:14, padding:"10px 12px", boxSizing:"border-box", outline:"none" }}/>
             </div>
 
+            {/* Passo 1: como o time joga — traduz tipo vs turma fechada numa pergunta simples */}
             <div>
-              <div style={{ fontSize:11, color:C.dim, marginBottom:4 }}>Tipo de Time</div>
-              <select value={form.id_tipo_time} onChange={e => { set("id_tipo_time", e.target.value); set("id_subtipo", ""); }}
-                style={{ width:"100%", background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8, color:C.cream, fontFamily:"inherit", fontSize:14, padding:"10px 12px" }}>
-                <option value="">Selecione...</option>
-                {(tipos||[]).map(t => <option key={t.id_tipo_time} value={t.id_tipo_time}>{t.descricao}</option>)}
-              </select>
+              <div style={{ fontSize:11, color:C.dim, marginBottom:6 }}>Como seu time joga?</div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                {(() => {
+                  const tipoTurma = (tipos||[]).find(t => t.eh_turma_fechada);
+                  const opcoes = [
+                    { id:"enfrenta", titulo:"Enfrentamos outros times", desc:"Jogos contra adversários (campeonato, amistosos)", emoji:"🆚" },
+                    { id:"entre_si", titulo:"Jogamos entre nós", desc:"Racha / pelada / turma fechada — o grupo joga entre si", emoji:"🤝" },
+                  ];
+                  return opcoes.map(op => {
+                    const ativo = modoJogo === op.id;
+                    const desabilitado = op.id === "entre_si" && !tipoTurma;
+                    return (
+                      <button key={op.id} type="button" disabled={desabilitado}
+                        onClick={() => {
+                          setModoJogo(op.id);
+                          if (op.id === "entre_si") { set("id_tipo_time", String(tipoTurma.id_tipo_time)); set("id_subtipo", ""); }
+                          else { set("id_tipo_time", ""); set("id_subtipo", ""); }
+                        }}
+                        style={{
+                          textAlign:"left", background: ativo ? C.gold : C.surf2,
+                          color: ativo ? "#0B3D2E" : (desabilitado ? C.border : C.cream),
+                          border:`1px solid ${ativo ? C.gold : C.border}`, borderRadius:10, padding:"12px 14px",
+                          fontFamily:"inherit", cursor: desabilitado ? "not-allowed" : "pointer", opacity: desabilitado ? 0.5 : 1,
+                        }}>
+                        <div style={{ fontSize:20, marginBottom:4 }}>{op.emoji}</div>
+                        <div style={{ fontSize:13.5, fontWeight:800, marginBottom:2 }}>{op.titulo}</div>
+                        <div style={{ fontSize:11, color: ativo ? "#0B3D2E" : C.dim, lineHeight:1.3 }}>{op.desc}</div>
+                      </button>
+                    );
+                  });
+                })()}
+              </div>
             </div>
 
-            {(() => {
-              const tipoSel = (tipos||[]).find(t => String(t.id_tipo_time) === String(form.id_tipo_time));
-              if (!tipoSel?.eh_turma_fechada) return null;
-              const subtipos = (tipos||[]).filter(t => !t.eh_turma_fechada);
-              return (
-                <div>
-                  <div style={{ fontSize:11, color:C.dim, marginBottom:4 }}>Modalidade da turma (subtipo)</div>
-                  <select value={form.id_subtipo||""} onChange={e => set("id_subtipo", e.target.value)}
-                    style={{ width:"100%", background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8, color:C.cream, fontFamily:"inherit", fontSize:14, padding:"10px 12px" }}>
-                    <option value="">Selecione a modalidade...</option>
-                    {subtipos.map(t => <option key={t.id_tipo_time} value={t.id_tipo_time}>{t.descricao}</option>)}
-                  </select>
-                  <div style={{ fontSize:11, color:C.dim, marginTop:4 }}>Turma fechada usa os parâmetros (titulares, posições) da modalidade escolhida.</div>
-                </div>
-              );
-            })()}
+            {/* Passo 2a: enfrenta outros → escolhe o tipo (sem turma fechada na lista) */}
+            {modoJogo === "enfrenta" && (
+              <div>
+                <div style={{ fontSize:11, color:C.dim, marginBottom:4 }}>Modalidade</div>
+                <select value={form.id_tipo_time} onChange={e => { set("id_tipo_time", e.target.value); set("id_subtipo", ""); }}
+                  style={{ width:"100%", background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8, color:C.cream, fontFamily:"inherit", fontSize:14, padding:"10px 12px" }}>
+                  <option value="">Selecione...</option>
+                  {(tipos||[]).filter(t => !t.eh_turma_fechada).map(t => <option key={t.id_tipo_time} value={t.id_tipo_time}>{t.descricao}</option>)}
+                </select>
+              </div>
+            )}
+
+            {/* Passo 2b: joga entre si → escolhe só a modalidade (subtipo) */}
+            {modoJogo === "entre_si" && (
+              <div>
+                <div style={{ fontSize:11, color:C.dim, marginBottom:4 }}>Qual a modalidade da turma?</div>
+                <select value={form.id_subtipo||""} onChange={e => set("id_subtipo", e.target.value)}
+                  style={{ width:"100%", background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8, color:C.cream, fontFamily:"inherit", fontSize:14, padding:"10px 12px" }}>
+                  <option value="">Selecione a modalidade...</option>
+                  {(tipos||[]).filter(t => !t.eh_turma_fechada).map(t => <option key={t.id_tipo_time} value={t.id_tipo_time}>{t.descricao}</option>)}
+                </select>
+                <div style={{ fontSize:11, color:C.dim, marginTop:4 }}>Ex: futsal, society — define titulares e posições que sua turma vai usar.</div>
+              </div>
+            )}
 
             <div style={{ display:"grid", gridTemplateColumns:"110px 1fr", gap:12 }}>
               <div>

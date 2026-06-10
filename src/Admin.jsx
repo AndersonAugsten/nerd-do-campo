@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.46";
+const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.48";
 const UFS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 
 // Paleta de cores do sistema — declarada no topo para evitar "Cannot access 'C' before initialization"
@@ -1022,18 +1022,18 @@ function Btn({ children, variant = "primary", onClick, disabled, style: s = {}, 
 }
 function Input({ label, error, style: s = {}, ...p }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 5, ...s }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0, ...s }}>
       {label && <label style={{ fontSize: 11, color: C.dim, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>{label}</label>}
-      <input {...p} style={{ background: C.surf2, border: `1px solid ${error ? C.loss : C.border}`, borderRadius: 8, padding: "9px 12px", color: C.cream, fontFamily: "inherit", fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }} />
+      <input {...p} style={{ background: C.surf2, border: `1px solid ${error ? C.loss : C.border}`, borderRadius: 8, padding: "9px 12px", color: C.cream, fontFamily: "inherit", fontSize: 14, outline: "none", width: "100%", minWidth: 0, boxSizing: "border-box" }} />
       {error && <span style={{ color: C.loss, fontSize: 12 }}>{error}</span>}
     </div>
   );
 }
 function Select({ label, children, error, style: s = {}, ...p }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 5, ...s }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0, ...s }}>
       {label && <label style={{ fontSize: 11, color: C.dim, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>{label}</label>}
-      <select {...p} style={{ background: C.surf2, border: `1px solid ${error ? C.loss : C.border}`, borderRadius: 8, padding: "9px 12px", color: C.cream, fontFamily: "inherit", fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }}>
+      <select {...p} style={{ background: C.surf2, border: `1px solid ${error ? C.loss : C.border}`, borderRadius: 8, padding: "9px 12px", color: C.cream, fontFamily: "inherit", fontSize: 14, outline: "none", width: "100%", minWidth: 0, boxSizing: "border-box" }}>
         {children}
       </select>
       {error && <span style={{ color: C.loss, fontSize: 12 }}>{error}</span>}
@@ -5030,13 +5030,13 @@ function FichaEncontro({ idTime, temporada, encontro, show, readOnly, onVoltar }
       <Card>
         <div style={{ fontSize:13, color:C.gold, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700, marginBottom:14 }}>Dados do encontro</div>
         <div className="campos-encontro" style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
-          <Input label="Data e hora *" type="datetime-local" value={cabecalho.data} onChange={e => setCabecalho(c => ({ ...c, data: e.target.value }))} style={{ minWidth:160, flex:1 }} />
-          <Select label="Local" value={cabecalho.id_campo} onChange={e => setCabecalho(c => ({ ...c, id_campo: e.target.value }))} style={{ minWidth:160 }}>
+          <Input label="Data e hora *" type="datetime-local" value={cabecalho.data} onChange={e => setCabecalho(c => ({ ...c, data: e.target.value }))} style={{ flex:"1 1 180px" }} />
+          <Select label="Local" value={cabecalho.id_campo} onChange={e => setCabecalho(c => ({ ...c, id_campo: e.target.value }))} style={{ flex:"1 1 150px" }}>
             <option value="">—</option>
             {(campos||[]).map(c => <option key={c.id_campo} value={c.id_campo}>{c.nome}</option>)}
           </Select>
-          <Input label="Observação" value={cabecalho.observacao} onChange={e => setCabecalho(c => ({ ...c, observacao: e.target.value }))} style={{ flex:1, minWidth:200 }} />
-          <Select label="🧺 Responsável pela lavagem" value={cabecalho.id_responsavel_lavagem} onChange={e => setCabecalho(c => ({ ...c, id_responsavel_lavagem: e.target.value }))} style={{ minWidth:180 }}>
+          <Input label="Observação" value={cabecalho.observacao} onChange={e => setCabecalho(c => ({ ...c, observacao: e.target.value }))} style={{ flex:"1 1 180px" }} />
+          <Select label="🧺 Responsável pela lavagem" value={cabecalho.id_responsavel_lavagem} onChange={e => setCabecalho(c => ({ ...c, id_responsavel_lavagem: e.target.value }))} style={{ flex:"1 1 170px" }}>
             <option value="">—</option>
             {(jogadores||[]).map(j => <option key={j.id_jogador} value={j.id_jogador}>{j.apelido || j.nome}</option>)}
           </Select>
