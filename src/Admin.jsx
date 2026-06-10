@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.25";
+const APP_VERSION = process.env.REACT_APP_VERSION || "1.0.0";
 const UFS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 
 // Paleta de cores do sistema — declarada no topo para evitar "Cannot access 'C' before initialization"
@@ -55,6 +55,7 @@ const URL  = process.env.REACT_APP_SUPABASE_URL || "https://nxztffulmvohduvudbhg
 const ANON = process.env.REACT_APP_SUPABASE_ANON || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im54enRmZnVsbXZvaGR1dnVkYmhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODY5ODMsImV4cCI6MjA5NTA2Mjk4M30.CwEmjukApMTJhkbKh1jlp4Q-IYrM26u-5SYx9p20nsg";
 
 let SESSION_TOKEN = sessionStorage.getItem("ndc_token") || null;
+let REFRESH_TOKEN = sessionStorage.getItem("ndc_refresh") || null;
 
 // Extrai o e-mail do usuário logado a partir do token JWT (payload base64).
 // Usado para registrar quem lançou cada movimento de caixa.
@@ -77,7 +78,30 @@ async function sbAuth(path, body) {
   return res.json();
 }
 
-async function sb(path, opts = {}) {
+// Renova o access_token usando o refresh_token. Retorna true se renovou.
+async function renovarToken() {
+  if (!REFRESH_TOKEN) return false;
+  try {
+    const res = await sbAuth("token?grant_type=refresh_token", { refresh_token: REFRESH_TOKEN });
+    if (res?.access_token) {
+      SESSION_TOKEN = res.access_token;
+      sessionStorage.setItem("ndc_token", res.access_token);
+      if (res.refresh_token) { REFRESH_TOKEN = res.refresh_token; sessionStorage.setItem("ndc_refresh", res.refresh_token); }
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
+// Limpa a sessão e força relogin (chamado quando o refresh falha).
+function encerrarSessao() {
+  SESSION_TOKEN = null; REFRESH_TOKEN = null;
+  sessionStorage.removeItem("ndc_token");
+  sessionStorage.removeItem("ndc_refresh");
+  window.dispatchEvent(new CustomEvent("ndc-sessao-expirada"));
+}
+
+async function sb(path, opts = {}, _jaTentou = false) {
   const headers = {
     apikey: ANON,
     Authorization: `Bearer ${SESSION_TOKEN || ANON}`,
@@ -86,6 +110,12 @@ async function sb(path, opts = {}) {
     ...opts.headers,
   };
   const res = await fetch(`${URL}/rest/v1/${path}`, { headers, ...opts });
+  if (res.status === 401 && !_jaTentou && SESSION_TOKEN) {
+    const renovou = await renovarToken();
+    if (renovou) return sb(path, opts, true);
+    encerrarSessao();
+    throw new Error("Sua sessão expirou. Faça login novamente.");
+  }
   if (!res.ok) { const e = await res.text(); throw new Error(e); }
   const txt = await res.text();
   return txt ? JSON.parse(txt) : null;
@@ -926,6 +956,18 @@ function ModalImportacao({ resultado, onClose, onConfirmar, salvando }) {
 // ══════════════════════════════════════════════════════════════
 
 // ── Ordenação — função utilitária pura (sem hooks) ───────────
+// Calcula a idade (anos completos) a partir da data de nascimento até hoje.
+function calcularIdade(dataNasc) {
+  if (!dataNasc) return null;
+  const nasc = new Date(String(dataNasc).slice(0,10) + "T00:00:00");
+  if (isNaN(nasc.getTime())) return null;
+  const hoje = new Date();
+  let idade = hoje.getFullYear() - nasc.getFullYear();
+  const m = hoje.getMonth() - nasc.getMonth();
+  if (m < 0 || (m === 0 && hoje.getDate() < nasc.getDate())) idade--;
+  return idade >= 0 && idade < 130 ? idade : null;
+}
+
 function sortData(dados, sortKey, asc) {
   if (!sortKey) return [...(dados||[])];
   return [...(dados||[])].sort((a, b) => {
@@ -992,18 +1034,18 @@ function Btn({ children, variant = "primary", onClick, disabled, style: s = {}, 
 }
 function Input({ label, error, style: s = {}, ...p }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 5, ...s }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0, ...s }}>
       {label && <label style={{ fontSize: 11, color: C.dim, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>{label}</label>}
-      <input {...p} style={{ background: C.surf2, border: `1px solid ${error ? C.loss : C.border}`, borderRadius: 8, padding: "9px 12px", color: C.cream, fontFamily: "inherit", fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }} />
+      <input {...p} style={{ background: C.surf2, border: `1px solid ${error ? C.loss : C.border}`, borderRadius: 8, padding: "9px 12px", color: C.cream, fontFamily: "inherit", fontSize: 14, outline: "none", width: "100%", minWidth: 0, boxSizing: "border-box" }} />
       {error && <span style={{ color: C.loss, fontSize: 12 }}>{error}</span>}
     </div>
   );
 }
 function Select({ label, children, error, style: s = {}, ...p }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 5, ...s }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0, ...s }}>
       {label && <label style={{ fontSize: 11, color: C.dim, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>{label}</label>}
-      <select {...p} style={{ background: C.surf2, border: `1px solid ${error ? C.loss : C.border}`, borderRadius: 8, padding: "9px 12px", color: C.cream, fontFamily: "inherit", fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }}>
+      <select {...p} style={{ background: C.surf2, border: `1px solid ${error ? C.loss : C.border}`, borderRadius: 8, padding: "9px 12px", color: C.cream, fontFamily: "inherit", fontSize: 14, outline: "none", width: "100%", minWidth: 0, boxSizing: "border-box" }}>
         {children}
       </select>
       {error && <span style={{ color: C.loss, fontSize: 12 }}>{error}</span>}
@@ -1084,10 +1126,10 @@ function Badge({ label, cor }) {
 }
 
 // ── LOGIN ─────────────────────────────────────────────────────
-function Login({ onLogin }) {
+function Login({ onLogin, aviso }) {
   const [email, setEmail]   = useState("");
   const [senha, setSenha]   = useState("");
-  const [erro, setErro]     = useState("");
+  const [erro, setErro]     = useState(aviso || "");
   const [loading, setLoading] = useState(false);
   const [modalRecuperar, setModalRecuperar] = useState(false);
   const [emailRec, setEmailRec] = useState("");
@@ -1101,6 +1143,7 @@ function Login({ onLogin }) {
     if (res.access_token) {
       SESSION_TOKEN = res.access_token;
       sessionStorage.setItem("ndc_token", res.access_token);
+      if (res.refresh_token) { REFRESH_TOKEN = res.refresh_token; sessionStorage.setItem("ndc_refresh", res.refresh_token); }
       onLogin(res);
     }
     else setErro("E-mail ou senha incorretos.");
@@ -1191,8 +1234,8 @@ function ListaPartidas({ temporada, onSelect, onNova, adversarios, campos, show:
     [temporada.id_temporada]
   );
   // Tipo do time e posições do tipo — para resolver a ordem do pai no esquema tático
-  const { data: _timeLista } = useQuery(() => temporada?.id_time ? api.get(`time?id_time=eq.${temporada.id_time}&select=id_tipo_time&limit=1`) : Promise.resolve([]), [temporada]);
-  const _tipoLista = _timeLista?.[0]?.id_tipo_time;
+  const { data: _timeLista } = useQuery(() => temporada?.id_time ? api.get(`time?id_time=eq.${temporada.id_time}&select=id_tipo_time,id_subtipo&limit=1`) : Promise.resolve([]), [temporada]);
+  const _tipoLista = _timeLista?.[0]?.id_subtipo || _timeLista?.[0]?.id_tipo_time;
   const { data: _posLista } = useQuery(() => _tipoLista ? api.get(`posicao?id_tipo_time=eq.${_tipoLista}&select=id_posicao,id_posicao_pai,ordem`) : Promise.resolve([]), [_tipoLista]);
   const mapaPosLista = {};
   (_posLista || []).forEach(p => { mapaPosLista[p.id_posicao] = p; });
@@ -1450,11 +1493,12 @@ function FichaPartida({ partida: p0, onVoltar, readOnly, idTime }) {
 
   const { data: jogadores }     = useQuery(() => idTime ? api.get(`jogador?id_jogador=gt.0&id_time=eq.${idTime}&select=*,posicao(nome)&order=camisa.asc`) : Promise.resolve([]), [idTime]);
   // Meu time: tipo, raio padrão e coordenadas da cidade-sede — declarado ANTES das queries que usam meuTipoTime (evita TDZ no bundle de produção)
-  const { data: meuTimeData } = useQuery(() => idTime ? api.get(`time?id_time=eq.${idTime}&select=id_time,id_tipo_time,raio_busca_km,numero_titulares,quantidade_periodos,minutos_padrao_periodo,permite_acrescimos,cidade:id_cidade_sede(nome,estado,latitude,longitude)&limit=1`) : Promise.resolve([]), [idTime]);
+  const { data: meuTimeData } = useQuery(() => idTime ? api.get(`time?id_time=eq.${idTime}&select=id_time,id_tipo_time,id_subtipo,raio_busca_km,numero_titulares,quantidade_periodos,minutos_padrao_periodo,permite_acrescimos,cidade:id_cidade_sede(nome,estado,latitude,longitude)&limit=1`) : Promise.resolve([]), [idTime]);
   const meuTime = meuTimeData?.[0];
   const meuTipoTime = meuTime?.id_tipo_time;
+  const meuTipoPosicoes = meuTime?.id_subtipo || meuTime?.id_tipo_time; // posições vêm do subtipo na turma
   const minhaCidade = meuTime?.cidade; // {nome, estado, latitude, longitude}
-  const { data: posicoes }      = useQuery(() => meuTipoTime ? api.get(`posicao?id_tipo_time=eq.${meuTipoTime}&select=*&order=ordem.asc`) : Promise.resolve([]), [meuTipoTime]);
+  const { data: posicoes }      = useQuery(() => meuTipoPosicoes ? api.get(`posicao?id_tipo_time=eq.${meuTipoPosicoes}&select=*&order=ordem.asc`) : Promise.resolve([]), [meuTipoPosicoes]);
   const { data: advsFicha } = useQuery(() => idTime ? api.get(`adversario?id_time=eq.${idTime}&select=id_adversario,nome&order=nome.asc`) : Promise.resolve([]), [idTime]);
   // Raio ajustável na tela (inicia com o padrão do time; ajuste é temporário, não salva)
   const [raioKm, setRaioKm] = useState(null);
@@ -1659,6 +1703,9 @@ function FichaPartida({ partida: p0, onVoltar, readOnly, idTime }) {
         </button>
       )}
 
+      {/* Link de confirmação de presença */}
+      {!readOnly && !cancelada && <LinkConfirmacao tipo="partida" idRef={partida.id_partida} idTime={idTime} dataRef={partida.data} show={show} />}
+
       {/* Placar */}
       {!cancelada && (
         <Card style={{ padding: "20px 24px" }}>
@@ -1700,9 +1747,9 @@ function FichaPartida({ partida: p0, onVoltar, readOnly, idTime }) {
                   <tbody>
                     {(participacoes || []).map((pa, i) => (
                       <tr key={pa.id_participacao} style={{ background: i % 2 === 0 ? C.surface : C.bg }}>
-                        <td style={{ padding: "10px 12px", fontWeight: 800, color: C.gold }}>{pa.camisa}</td>
+                        <td style={{ padding: "10px 12px" }}><CamisaCell pa={pa} reload={reloadPart} show={show} readOnly={readOnly} /></td>
                         <td style={{ padding: "10px 12px", fontWeight: 700 }}>{pa.jogador?.apelido || pa.jogador?.nome}</td>
-                        <td style={{ padding: "10px 12px", color: C.dim, fontSize: 13 }}>{pa.posicao?.nome}</td>
+                        <td style={{ padding: "10px 12px" }}><PosicaoCell pa={pa} posicoes={posicoes} reload={reloadPart} show={show} readOnly={readOnly} /></td>
                         <td style={{ padding: "10px 12px", textAlign: "center" }}><ToggleCell pa={pa} field="titular" reload={reloadPart} show={show} /></td>
                         <td style={{ padding: "10px 12px", textAlign: "center" }}><ToggleCell pa={pa} field="capitao" reload={reloadPart} show={show} /></td>
                         <td style={{ padding: "10px 12px", textAlign: "center" }}><NumCell pa={pa} field="cartao_amarelo" reload={reloadPart} show={show} /></td>
@@ -1994,6 +2041,42 @@ function NumCell({ pa, field, reload, show }) {
 }
 
 // ── FORM ESCALAÇÃO ────────────────────────────────────────────
+// Célula editável de camisa (input inline)
+function CamisaCell({ pa, reload, show, readOnly }) {
+  const [val, setVal] = useState(pa.camisa || "");
+  const [editando, setEditando] = useState(false);
+  async function salvar() {
+    setEditando(false);
+    if (String(val) === String(pa.camisa || "")) return;
+    try { await api.patch(`participacao?id_participacao=eq.${pa.id_participacao}`, { camisa: val || null }); reload(); }
+    catch (e) { show(e.message, "error"); }
+  }
+  if (readOnly) return <span style={{ fontWeight:800, color:C.gold }}>{pa.camisa}</span>;
+  return editando
+    ? <input autoFocus value={val} onChange={e => setVal(e.target.value)} onBlur={salvar} onKeyDown={e => e.key==="Enter" && salvar()}
+        style={{ width:42, background:C.bg, border:`1px solid ${C.gold}`, borderRadius:4, color:C.cream, fontSize:13, padding:"4px 6px", fontFamily:"inherit", textAlign:"center" }} />
+    : <span onClick={() => setEditando(true)} style={{ fontWeight:800, color:C.gold, cursor:"pointer", borderBottom:`1px dotted ${C.gold}66` }}>{pa.camisa || "—"}</span>;
+}
+// Célula editável de posição (select inline)
+function PosicaoCell({ pa, posicoes, reload, show, readOnly }) {
+  const [editando, setEditando] = useState(false);
+  async function muda(novo) {
+    setEditando(false);
+    try { await api.patch(`participacao?id_participacao=eq.${pa.id_participacao}`, { id_posicao: novo ? Number(novo) : null }); reload(); }
+    catch (e) { show(e.message, "error"); }
+  }
+  if (readOnly) return <span style={{ color:C.dim, fontSize:13 }}>{pa.posicao?.nome}</span>;
+  const idsComFilhas = new Set((posicoes||[]).filter(p => p.id_posicao_pai).map(p => p.id_posicao_pai));
+  const opcoes = (posicoes||[]).filter(p => p.id_posicao_pai || !idsComFilhas.has(p.id_posicao));
+  return editando
+    ? <select autoFocus defaultValue={pa.id_posicao || ""} onChange={e => muda(e.target.value)} onBlur={() => setEditando(false)}
+        style={{ background:C.bg, border:`1px solid ${C.gold}`, borderRadius:4, color:C.cream, fontSize:12, padding:"4px 6px", fontFamily:"inherit" }}>
+        <option value="">—</option>
+        {opcoes.map(p => <option key={p.id_posicao} value={p.id_posicao}>{p.nome}</option>)}
+      </select>
+    : <span onClick={() => setEditando(true)} style={{ color:C.dim, fontSize:13, cursor:"pointer", borderBottom:`1px dotted ${C.dim}66` }}>{pa.posicao?.nome || "—"}</span>;
+}
+
 function FormEscalacao({ partida, jogadores, posicoes, participacoes, meuTime, onSalvo, show, readOnly = false }) {
   const jaEscalados = new Set((participacoes).map(p => p.id_jogador));
   const disponiveis = jogadores.filter(j => !jaEscalados.has(j.id_jogador));
@@ -2004,6 +2087,34 @@ function FormEscalacao({ partida, jogadores, posicoes, participacoes, meuTime, o
 
   const numeroTitulares = meuTime?.numero_titulares || null;
   const titularesAtuais = (participacoes || []).filter(p => p.titular === "S" && p.id_jogador > 0).length;
+
+  // Traz confirmados "Vou" (jogadores cadastrados) como reservas. Convidados ignorados.
+  // Entram como reserva (titular "N") para não estourar o limite de titulares; o admin promove.
+  async function trazerConfirmados() {
+    setSaving(true);
+    try {
+      const links = await api.get(`link_confirmacao?tipo=eq.partida&id_ref=eq.${partida.id_partida}&select=id_link&limit=1`);
+      if (!links?.[0]) { show("Nenhum link de confirmação foi gerado para esta partida.", "error"); setSaving(false); return; }
+      const confs = await api.get(`confirmacao_presenca?id_link=eq.${links[0].id_link}&status=eq.vou&id_jogador=not.is.null&select=id_jogador`);
+      const aAdicionar = (confs||[]).filter(c => !jaEscalados.has(c.id_jogador));
+      const convidados = await api.get(`confirmacao_presenca?id_link=eq.${links[0].id_link}&status=eq.vou&id_jogador=is.null&select=id_confirmacao`);
+      if (aAdicionar.length === 0) {
+        show((convidados||[]).length > 0 ? `Todos os jogadores confirmados já estão escalados. ${convidados.length} convidado(s) ignorados.` : "Nenhum jogador novo confirmado para trazer.");
+        setSaving(false); return;
+      }
+      for (const c of aAdicionar) {
+        const jog = jogadores.find(j => j.id_jogador === c.id_jogador);
+        await api.post("participacao", {
+          id_partida: partida.id_partida, id_jogador: c.id_jogador,
+          camisa: jog?.camisa || "", id_posicao: jog?.id_posicao || null,
+          titular: "N", capitao: "N", cartao_amarelo: 0, cartao_vermelho: 0, gols_contra: 0,
+        });
+      }
+      const aviso = (convidados||[]).length > 0 ? ` (${convidados.length} convidado(s) ignorado(s))` : "";
+      show(`${aAdicionar.length} confirmado(s) adicionado(s) como reserva — promova a titular conforme necessário.${aviso}`);
+      onSalvo();
+    } catch (e) { show(e.message, "error"); } finally { setSaving(false); }
+  }
 
   useEffect(() => {
     if (form.id_jogador) {
@@ -2084,6 +2195,7 @@ function FormEscalacao({ partida, jogadores, posicoes, participacoes, meuTime, o
       </div>
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
         <Btn onClick={salvar} disabled={saving || readOnly}>{saving ? "Salvando..." : readOnly ? "Somente Leitura" : "Adicionar"}</Btn>
+        {!readOnly && <Btn variant="secondary" onClick={trazerConfirmados} disabled={saving}>📲 Trazer confirmados</Btn>}
       </div>
     </div>
   );
@@ -2224,9 +2336,45 @@ const MENU_BASE = [
 // PÁGINA DE INÍCIO / ONBOARDING
 // ══════════════════════════════════════════════════════════════
 function PaginaInicio({ dados, onNavegar }) {
-  const { cidades, campos, posicoes, adversarios, jogadores, temporadas, partidas } = dados;
+  const { cidades, campos, posicoes, adversarios, jogadores, temporadas, partidas, ehTurmaFechada, timesInternos, encontros } = dados;
 
-  const etapas = [
+  const etapas = ehTurmaFechada ? [
+    {
+      numero: 1, titulo: "Posições", icone: "🎯", menu: "posicoes",
+      descricao: "Confira as posições da modalidade da turma (vêm da modalidade escolhida).",
+      exemplo: "Ex: Goleiro, Fixo, Ala, Pivô",
+      concluido: (posicoes||[]).length > 0, obrigatorio: true,
+      dica: "Definidas pela modalidade (subtipo) do time.",
+    },
+    {
+      numero: 2, titulo: "Times Internos", icone: "🎽", menu: "times_internos",
+      descricao: "Cadastre os times internos que se enfrentam na turma.",
+      exemplo: "Ex: Laranja, Preto, Branco",
+      concluido: (timesInternos||[]).length > 0, obrigatorio: true,
+      dica: "Os times fixos que jogam entre si nos encontros.",
+    },
+    {
+      numero: 3, titulo: "Jogadores", icone: "👕", menu: "jogadores",
+      descricao: "Cadastre os jogadores da turma com nome, camisa e posição.",
+      exemplo: "Ex: Dudu (camisa 9), Leo (camisa 5)",
+      concluido: (jogadores||[]).length > 0, obrigatorio: true,
+      dica: "Necessário para registrar presença e estatísticas.",
+    },
+    {
+      numero: 4, titulo: "Temporada", icone: "📆", menu: "temporadas",
+      descricao: "Configure a temporada atual com datas.",
+      exemplo: "Ex: Temporada 2025",
+      concluido: (temporadas||[]).length > 0, obrigatorio: true,
+      dica: "Necessária antes de registrar encontros.",
+    },
+    {
+      numero: 5, titulo: "Encontros", icone: "📅", menu: "partidas",
+      descricao: "Registre os encontros (dias de jogo) com os jogos do rodízio e a presença.",
+      exemplo: "Ex: Encontro de 21/06 — Laranja 3x2 Preto",
+      concluido: (encontros||[]).length > 0, obrigatorio: true,
+      dica: "O coração da turma: jogos e estatísticas de cada dia.",
+    },
+  ] : [
     {
       numero: 1,
       titulo: "Campos",
@@ -2918,7 +3066,7 @@ function PaginaAjuda() {
           O manual contém o guia completo do sistema — desde o cadastro inicial
           até o controle de mensalidades. Atualizado para a versão atual.
         </div>
-        <a href="/manual.pdf?v=1.13.25" target="_blank" rel="noopener noreferrer"
+        <a href="/manual.pdf?v=1.0.0" target="_blank" rel="noopener noreferrer"
           style={{ display:"inline-flex", alignItems:"center", gap:10,
             background:C.gold, color:"#0B3D2E", borderRadius:10,
             padding:"14px 28px", fontFamily:"inherit", fontWeight:800,
@@ -3389,6 +3537,7 @@ function CrudEventos({ idTime, show, readOnly }) {
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
   const [detalhe, setDetalhe] = useState(null); // evento aberto para ver/lançar movimentos
+  const [linkEvento, setLinkEvento] = useState(null); // evento cujo link de confirmação está aberto
   const [formMov, setFormMov] = useState({});
 
   function abrirNovo() {
@@ -3536,6 +3685,7 @@ function CrudEventos({ idTime, show, readOnly }) {
               <div style={{ display:"flex", gap:8, marginTop:14, flexWrap:"wrap" }}>
                 {ev.status!=="encerrado" && ev.modo==="detalhado" && <Btn variant="secondary" style={{ fontSize:11, padding:"5px 12px" }} onClick={()=>abrirLancar(ev)}>+ Lançar receita/despesa</Btn>}
                 {ev.status!=="encerrado" && <Btn variant="secondary" style={{ fontSize:11, padding:"5px 12px" }} onClick={()=>abrirEditar(ev)}>Editar</Btn>}
+                {!readOnly && <Btn variant="secondary" style={{ fontSize:11, padding:"5px 12px" }} onClick={()=>setLinkEvento(ev)}>📲 Confirmação</Btn>}
                 {ev.status!=="encerrado" && <Btn style={{ fontSize:11, padding:"5px 12px" }} onClick={()=>encerrar(ev)}>Encerrar</Btn>}
                 {ev.status==="encerrado" && <Btn variant="secondary" style={{ fontSize:11, padding:"5px 12px" }} onClick={()=>reabrir(ev)}>🔓 Reabrir</Btn>}
                 {!movs.length && <Btn variant="danger" style={{ fontSize:11, padding:"5px 12px" }} onClick={()=>excluir(ev)}>Excluir</Btn>}
@@ -3576,6 +3726,11 @@ function CrudEventos({ idTime, show, readOnly }) {
       )}
 
       {/* Modal lançar movimento no evento */}
+      {linkEvento && (
+        <Modal title={`Confirmação de presença — ${linkEvento.nome}`} onClose={()=>setLinkEvento(null)}>
+          <LinkConfirmacao tipo="evento" idRef={linkEvento.id_evento} idTime={idTime} dataRef={linkEvento.data_evento} show={show} />
+        </Modal>
+      )}
       {detalhe && (
         <Modal title={`Lançar em — ${detalhe.nome}`} onClose={()=>setDetalhe(null)}>
           <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
@@ -3607,10 +3762,17 @@ function CrudEventos({ idTime, show, readOnly }) {
 
 export default function AdminAppCompleto() {
   const [session, setSession]       = useState(SESSION_TOKEN ? {access_token: SESSION_TOKEN} : null);
+  const [sessaoExpirou, setSessaoExpirou] = useState(false);
   const [idTime, setIdTime]         = useState(null);
   const [timeInativo, setTimeInativo] = useState(false);
   const [isSuperadmin, setIsSuperadmin] = useState(false);
   const [menu, setMenu] = useState("inicio");
+
+  useEffect(() => {
+    const handler = () => { setSessaoExpirou(true); setSession(null); };
+    window.addEventListener("ndc-sessao-expirada", handler);
+    return () => window.removeEventListener("ndc-sessao-expirada", handler);
+  }, []);
 
   const [partida, setPartida]   = useState(null);
   const [novaPartida, setNovaPartida] = useState(false);
@@ -3654,6 +3816,14 @@ export default function AdminAppCompleto() {
     [session, idTime]
   );
 
+  // Flag de turma fechada — query simples na tipo_time (sem embedding, evita
+  // ambiguidade de FK). Fica aqui junto dos demais hooks, ANTES de returns condicionais.
+  const _idTipoTime = times?.[0]?.id_tipo_time;
+  const { data: _tipoDoTime } = useQuery(() =>
+    _idTipoTime ? api.get(`tipo_time?id_tipo_time=eq.${_idTipoTime}&select=eh_turma_fechada&limit=1`) : Promise.resolve([]),
+    [_idTipoTime]
+  );
+
   const { data: permissoesRaw } = useQuery(() =>
     session?.user?.id && idTime
       ? api.get(`usuario_permissao?user_id=eq.${session.user.id}&id_time=eq.${idTime}&select=*`)
@@ -3695,8 +3865,15 @@ export default function AdminAppCompleto() {
   const { data: _jogadores }  = useQuery(() => idTime ? api.get(`jogador?id_time=eq.${idTime}&id_jogador=gt.0&select=id_jogador&limit=1`) : Promise.resolve([]), [session, idTime]);
   const _idsTemp = (temporadas||[]).map(t=>t.id_temporada).join(",");
   const { data: _partidas }   = useQuery(() => _idsTemp ? api.get(`partida?id_temporada=in.(${_idsTemp})&select=id_partida&limit=1`) : Promise.resolve([]), [_idsTemp]);
+  const { data: _timesInternos } = useQuery(() => idTime ? api.get(`time_interno?id_time=eq.${idTime}&select=id_time_interno&limit=1`) : Promise.resolve([]), [session, idTime]);
+  const { data: _encontros }  = useQuery(() => _idsTemp ? api.get(`encontro?id_temporada=in.(${_idsTemp})&select=id_encontro&limit=1`) : Promise.resolve([]), [_idsTemp]);
   const [temporadaSel, setTemporadaSel] = useState(null);
-  useEffect(() => { if (temporadas?.length && !temporadaSel) setTemporadaSel(temporadas[0]); }, [temporadas]);
+  useEffect(() => {
+    const lista = temporadas || [];
+    if (lista.length === 0) { if (temporadaSel) setTemporadaSel(null); return; }
+    const aindaValida = temporadaSel && lista.some(t => t.id_temporada === temporadaSel.id_temporada);
+    if (!aindaValida) setTemporadaSel(lista[0]);
+  }, [temporadas]);
 
   if (loadManut) return null;
 
@@ -3721,7 +3898,7 @@ export default function AdminAppCompleto() {
     );
   }
 
-  if (!session) return <Login onLogin={setSession} />;
+  if (!session) return <Login onLogin={(r) => { setSessaoExpirou(false); setSession(r); }} aviso={sessaoExpirou ? "Sua sessão expirou. Faça login novamente." : ""} />;
 
   // Bloqueio de time inativo
   if (timeInativo) {
@@ -3737,7 +3914,7 @@ export default function AdminAppCompleto() {
           <div style={{ fontSize:13, color:C.gold, fontWeight:700, marginBottom:24 }}>
             nerddocampo10@gmail.com
           </div>
-          <button onClick={() => { SESSION_TOKEN=null; sessionStorage.removeItem("ndc_token"); setSession(null); setTimeInativo(false); }}
+          <button onClick={() => { SESSION_TOKEN=null; REFRESH_TOKEN=null; sessionStorage.removeItem("ndc_token"); sessionStorage.removeItem("ndc_refresh"); setSession(null); setTimeInativo(false); }}
             style={{ background:C.gold, color:"#0B3D2E", border:"none", borderRadius:10, padding:"12px 32px", fontFamily:"inherit", fontWeight:800, fontSize:14, cursor:"pointer", textTransform:"uppercase" }}>
             Sair
           </button>
@@ -3747,9 +3924,24 @@ export default function AdminAppCompleto() {
   }
 
   const time = times?.[0];
+  const ehTurmaFechada = !!_tipoDoTime?.[0]?.eh_turma_fechada;
 
   function navMenu(id) { setMenu(id); setPartida(null); setNovaPartida(false); }
-  const MENU = MENU_BASE.filter(m => canVer(m.id));
+  // Menu base + item de Times Internos (só para turma fechada). Aditivo: times tradicionais não veem.
+  const MENU_COM_TURMA = ehTurmaFechada
+    ? (() => {
+        // Turma fechada: remove Adversários (não há adversário externo),
+        // renomeia Partidas→Encontros e adiciona Times Internos.
+        const base = MENU_BASE
+          .filter(m => m.id !== "adversarios")
+          .map(m => m.id === "partidas" ? { ...m, label:"Encontros", icon:"📋" } : m);
+        const idx = base.findIndex(m => m.id === "jogadores");
+        const item = { id:"times_internos", label:"Times Internos", icon:"🧡", grupo:"Cadastros" };
+        if (idx >= 0) base.splice(idx + 1, 0, item); else base.push(item);
+        return base;
+      })()
+    : MENU_BASE;
+  const MENU = MENU_COM_TURMA.filter(m => canVer(m.id));
 
   const secTitle = (label) => (
     <div style={{ fontSize:18, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:20, display:"flex", alignItems:"center", gap:10 }}>
@@ -3760,6 +3952,45 @@ export default function AdminAppCompleto() {
 
   return (
     <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"'Oswald','Arial Narrow',Arial,sans-serif", color:C.cream, display:"flex", flexDirection:"column" }}>
+      <style>{`
+        /* ── Navegação mobile: retrato (largura) OU paisagem de celular (altura baixa) ── */
+        @media (max-width:768px), (max-height:600px) and (orientation:landscape){
+          .admin-header{padding:0 12px !important; gap:8px !important;}
+          .header-time-nome{display:none;}
+          .admin-layout{flex-direction:column !important;}
+          /* Sidebar vira barra horizontal rolável no topo do conteúdo */
+          .admin-sidebar{
+            width:100% !important; height:auto !important; max-height:none !important; position:sticky; top:64px;
+            display:flex !important; flex-direction:row !important; overflow-x:auto; overflow-y:hidden;
+            border-right:none !important; border-bottom:1px solid #1F5C3E;
+            padding:6px 8px !important; gap:4px; -webkit-overflow-scrolling:touch; z-index:90;
+          }
+          .admin-sidebar .menu-grupo{display:flex; flex-direction:row; align-items:center; flex-shrink:0;}
+          .admin-sidebar .menu-grupo-titulo{display:none !important;}
+          .admin-sidebar button{
+            white-space:nowrap; flex-shrink:0; border-left:none !important;
+            border-bottom:3px solid transparent; padding:8px 12px !important; font-size:11px !important;
+          }
+          .admin-main{padding:16px 12px !important;}
+          /* Inputs nativos não excedem o container */
+          input, select, textarea{max-width:100% !important; box-sizing:border-box !important;}
+        }
+        /* ── Empilhamento de campos: só telas realmente estreitas (retrato/celular pequeno) ── */
+        @media(max-width:560px){
+          .form-grid-2, .form-grid-3, .form-grid-auto{grid-template-columns:1fr !important;}
+          .campo-flex{min-width:100% !important; flex:1 1 100% !important;}
+          .presenca-acoes{flex-direction:column !important; align-items:stretch !important;}
+          .presenca-acoes > *{width:100% !important; min-width:0 !important;}
+        }
+        /* Grids reutilizáveis (desktop) */
+        .form-grid-2{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+        /* Campos do encontro: grid que se adapta — nunca estoura nem sobrepõe.
+           auto-fit + minmax garante colunas que encolhem até caber. */
+        .campos-encontro{display:flex; flex-direction:column; gap:14px; max-width:420px;}
+        .campos-encontro > *{width:100%;}
+        .form-grid-3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;}
+        .form-grid-auto{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px;}
+      `}</style>
       <Toast {...(toast||{msg:null})} />
 
       {/* Header */}
@@ -3797,7 +4028,7 @@ export default function AdminAppCompleto() {
               {(temporadas||[]).map(t=><option key={t.id_temporada} value={t.id_temporada}>{t.nome}</option>)}
             </select>
           )}
-          <Btn variant="danger" style={{ fontSize:11, padding:"6px 12px" }} onClick={() => { SESSION_TOKEN=null; sessionStorage.removeItem("ndc_token"); setSession(null); }}>Sair</Btn>
+          <Btn variant="danger" style={{ fontSize:11, padding:"6px 12px" }} onClick={() => { SESSION_TOKEN=null; REFRESH_TOKEN=null; sessionStorage.removeItem("ndc_token"); sessionStorage.removeItem("ndc_refresh"); setSession(null); }}>Sair</Btn>
         </div>
       </header>
 
@@ -3864,14 +4095,18 @@ export default function AdminAppCompleto() {
           )}
           {menu === "inicio" && (
             <PaginaInicio
-              dados={{ cidades:_cidades, campos:_campos, posicoes:_posicoes, adversarios:_adversarios, jogadores:_jogadores, temporadas, partidas:_partidas }}
+              dados={{ cidades:_cidades, campos:_campos, posicoes:_posicoes, adversarios:_adversarios, jogadores:_jogadores, temporadas, partidas:_partidas, ehTurmaFechada, timesInternos:_timesInternos, encontros:_encontros }}
               onNavegar={setMenu}
             />
           )}
           {menu === "app" && (
             <VisaoAppPublico time={(times||[])[0]} temporadas={temporadas}/>
           )}
-          {menu === "partidas" && !temporadaSel && (
+          {/* Turma fechada: "Partidas" vira "Encontros" */}
+          {menu === "partidas" && ehTurmaFechada && (<>{secTitle("Encontros")}
+            <ListaEncontros idTime={idTime} temporada={temporadaSel} show={show} readOnly={!canEdit("partidas")} />
+          </>)}
+          {menu === "partidas" && !ehTurmaFechada && !temporadaSel && (
             <Card style={{ padding:32, textAlign:"center" }}>
               <div style={{ fontSize:40, marginBottom:12 }}>📆</div>
               <div style={{ fontSize:18, fontWeight:800, color:C.cream, marginBottom:8 }}>Nenhuma temporada cadastrada</div>
@@ -3883,12 +4118,12 @@ export default function AdminAppCompleto() {
                 : <div style={{ fontSize:12, color:C.dim }}>Peça a um administrador para cadastrar a temporada.</div>}
             </Card>
           )}
-          {menu === "partidas" && !partida && !novaPartida && temporadaSel && (<>
+          {menu === "partidas" && !ehTurmaFechada && !partida && !novaPartida && temporadaSel && (<>
             {secTitle(`Partidas — ${temporadaSel.nome}`)}
             <ListaPartidasWrapper temporada={temporadaSel} onSelect={p=>{setPartida(p);}} onNova={()=>setNovaPartida(true)} show={show} />
           </>)}
 
-          {menu === "partidas" && novaPartida && temporadaSel && (<>
+          {menu === "partidas" && !ehTurmaFechada && novaPartida && temporadaSel && (<>
             <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
               {secTitle("Nova Partida")}
               <Btn variant="secondary" style={{ fontSize:11, padding:"6px 12px", marginTop:-20 }} onClick={()=>setNovaPartida(false)}>← Voltar</Btn>
@@ -3898,7 +4133,7 @@ export default function AdminAppCompleto() {
             </Card>
           </>)}
 
-          {menu === "partidas" && partida && !novaPartida && (<>
+          {menu === "partidas" && !ehTurmaFechada && partida && !novaPartida && (<>
             <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
               {secTitle("Ficha da Partida")}
               <Btn variant="secondary" style={{ fontSize:11, padding:"6px 12px", marginTop:-20 }} onClick={()=>setPartida(null)}>← Voltar</Btn>
@@ -3910,6 +4145,7 @@ export default function AdminAppCompleto() {
           {menu === "adversarios" && (<>{secTitle("Adversários")}<CrudAdversarios idTime={idTime} show={show} readOnly={!canEdit("adversarios")} /></>)}
           {menu === "campos"      && (<>{secTitle("Campos")}<CrudCampos idTime={idTime} show={show} readOnly={!canEdit("campos")} /></>)}
           {menu === "posicoes"    && (<>{secTitle("Posições")}<CrudPosicoes idTime={idTime} show={show} readOnly={!canEdit("posicoes")} /></>)}
+          {menu === "times_internos" && (<>{secTitle("Times Internos")}<CrudTimesInternos idTime={idTime} show={show} readOnly={!canEdit("times_internos")} /></>)}
           {menu === "temporadas"  && (<>{secTitle("Temporadas")}<CrudTemporadas idTime={idTime} show={show} readOnly={!canEdit("temporadas")} /></>)}
           {menu === "mensalidades" && (<CrudMensalidades idTime={idTime} show={show} readOnly={!canEdit("mensalidades")}/>)}
           {menu === "caixa"         && (<CrudCaixa idTime={idTime} show={show} readOnly={!canEdit("caixa")}/>)}
@@ -3945,6 +4181,8 @@ function TabelaJogadores({ grupo, lista, sk, asc, onSort, onEditar, onInativar, 
             <ThSortable colKey="camisa"      sortKey={sk} asc={asc} onSort={onSort}>#</ThSortable>
             <ThSortable colKey="nome"        sortKey={sk} asc={asc} onSort={onSort}>Nome</ThSortable>
             <ThSortable colKey="apelido"     sortKey={sk} asc={asc} onSort={onSort}>Apelido</ThSortable>
+            <ThSortable colKey="data_nascimento" sortKey={sk} asc={asc} onSort={onSort}>Nascimento</ThSortable>
+            <ThSortable colKey="idade_sort" sortKey={sk} asc={asc} onSort={onSort}>Idade</ThSortable>
             <ThSortable colKey="posicao.nome" sortKey={sk} asc={asc} onSort={onSort}>Posição</ThSortable>
             <ThSortable colKey="telefone"    sortKey={sk} asc={asc} onSort={onSort}>Telefone</ThSortable>
             <ThSortable colKey="email"       sortKey={sk} asc={asc} onSort={onSort}>E-mail</ThSortable>
@@ -3959,6 +4197,8 @@ function TabelaJogadores({ grupo, lista, sk, asc, onSort, onEditar, onInativar, 
                 <td style={{ padding:"11px 14px", fontWeight:800, color:C.gold, whiteSpace:"nowrap" }}>{j.camisa}</td>
                 <td style={{ padding:"11px 14px", fontWeight:700, whiteSpace:"nowrap" }}>{j.nome}</td>
                 <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{j.apelido || "—"}</td>
+                <td style={{ padding:"11px 14px", color:C.dim, fontSize:12, whiteSpace:"nowrap" }}>{j.data_nascimento ? new Date(j.data_nascimento + "T00:00:00").toLocaleDateString("pt-BR", { day:"2-digit", month:"2-digit", year:"numeric" }) : "—"}</td>
+                <td style={{ padding:"11px 14px", color:C.dim, fontSize:12, whiteSpace:"nowrap" }}>{calcularIdade(j.data_nascimento) != null ? `${calcularIdade(j.data_nascimento)} anos` : "—"}</td>
                 <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{j.posicao?.nome ? (j.posicao.id_posicao_pai && mapaPosJog[j.posicao.id_posicao_pai] ? `${mapaPosJog[j.posicao.id_posicao_pai]} › ${j.posicao.nome}` : j.posicao.nome) : "—"}</td>
                 <td style={{ padding:"11px 14px", color:C.dim, fontSize:12, whiteSpace:"nowrap" }}>{j.telefone || "—"}</td>
                 <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{j.email || "—"}</td>
@@ -3985,8 +4225,8 @@ function TabelaJogadores({ grupo, lista, sk, asc, onSort, onEditar, onInativar, 
 function CrudJogadores({ idTime, show, readOnly }) {
   const _idTimeJ = idTime; // recebido por prop (filtrado pelo usuário logado)
   // Tipo de time, para filtrar as posições disponíveis
-  const { data: _timeInfo } = useQuery(() => _idTimeJ ? api.get(`time?id_time=eq.${_idTimeJ}&select=id_tipo_time&limit=1`) : Promise.resolve([]), [_idTimeJ]);
-  const _tipoTimeJ = _timeInfo?.[0]?.id_tipo_time;
+  const { data: _timeInfo } = useQuery(() => _idTimeJ ? api.get(`time?id_time=eq.${_idTimeJ}&select=id_tipo_time,id_subtipo&limit=1`) : Promise.resolve([]), [_idTimeJ]);
+  const _tipoTimeJ = _timeInfo?.[0]?.id_subtipo || _timeInfo?.[0]?.id_tipo_time;
   const { data: jogadores, loading, reload } = useQuery(() => 
     _idTimeJ ? api.get(`jogador?id_jogador=gt.0&id_time=eq.${_idTimeJ}&select=*,posicao(nome,ordem,id_posicao_pai)&order=camisa.asc`) : Promise.resolve([]),
     [_idTimeJ]
@@ -4004,14 +4244,14 @@ function CrudJogadores({ idTime, show, readOnly }) {
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  function abrirNovo() { setForm({ nome:"", apelido:"", camisa:"", id_posicao:"", telefone:"", email:"", data_inicio:"", observacoes:"" }); setModal("novo"); }
+  function abrirNovo() { setForm({ nome:"", apelido:"", camisa:"", id_posicao:"", telefone:"", email:"", data_nascimento:"", data_inicio:"", observacoes:"" }); setModal("novo"); }
   function abrirEditar(j) { setForm({ ...j, id_posicao: j.id_posicao ? String(j.id_posicao) : "" }); setModal(j); }
 
   async function salvar() {
     if (!form.nome) { show("Nome obrigatório.", "error"); return; }
     setSaving(true);
     try {
-      const body = { nome: form.nome, apelido: form.apelido||null, camisa: form.camisa||null, id_posicao: form.id_posicao ? Number(form.id_posicao) : null, telefone: form.telefone||null, email: form.email||null, data_inicio: form.data_inicio||null, observacoes: form.observacoes||null, foto_url: form.foto_url||null, id_time: idTime||null };
+      const body = { nome: form.nome, apelido: form.apelido||null, camisa: form.camisa||null, id_posicao: form.id_posicao ? Number(form.id_posicao) : null, telefone: form.telefone||null, email: form.email||null, data_nascimento: form.data_nascimento||null, data_inicio: form.data_inicio||null, observacoes: form.observacoes||null, foto_url: form.foto_url||null, id_time: idTime||null };
       if (modal === "novo") await api.post("jogador", body);
       else await api.patch(`jogador?id_jogador=eq.${form.id_jogador}`, body);
       show(modal === "novo" ? "Jogador criado!" : "Jogador atualizado!"); setModal(null); reload();
@@ -4062,8 +4302,9 @@ function CrudJogadores({ idTime, show, readOnly }) {
   }
 
   if (loading) return <Spinner />;
-  const ativos   = (jogadores||[]).filter(j => !j.data_fim);
-  const inativos = (jogadores||[]).filter(j =>  j.data_fim);
+  const _comIdade = (jogadores||[]).map(j => ({ ...j, idade_sort: calcularIdade(j.data_nascimento) ?? -1 }));
+  const ativos   = _comIdade.filter(j => !j.data_fim);
+  const inativos = _comIdade.filter(j =>  j.data_fim);
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
@@ -4148,6 +4389,9 @@ function CrudJogadores({ idTime, show, readOnly }) {
                     .map(p => <option key={p.id_posicao} value={p.id_posicao}>{p.nome}</option>);
                 })()}
               </Select>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+              <Input label="Data de nascimento" type="date" value={form.data_nascimento ? String(form.data_nascimento).split("T")[0] : ""} onChange={e => set("data_nascimento", e.target.value)} />
             </div>
             {(posicoes||[]).length === 0 && (
               <div style={{ fontSize:12, color:C.gold, marginTop:-4 }}>
@@ -4458,13 +4702,719 @@ function CrudCampos({ idTime, show, readOnly }) {
   );
 }
 
+// ── CRUD TIMES INTERNOS (turma fechada) ──────────────────────
+// Times internos pertencem ao TIME (histórico plurianual). Só os
+// sem data_fim aparecem ao montar um jogo do encontro. Tela isolada,
+// usada apenas quando o time é do tipo turma fechada.
+function CrudTimesInternos({ idTime, show, readOnly }) {
+  const { data: times, loading, reload } = useQuery(() => idTime ? api.get(`time_interno?id_time=eq.${idTime}&select=*&order=data_fim.asc.nullsfirst,nome.asc`) : Promise.resolve([]), [idTime]);
+  const [modal, setModal]   = useState(null);
+  const [form, setForm]     = useState({});
+  const [saving, setSaving] = useState(false);
+  const [loadingImport, setLoadingImport] = useState(null);
+  const [resultadoImport, setResultadoImport] = useState(null);
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  async function confirmarImport() {
+    const dados = resultadoImport?._dados || [];
+    setSaving(true);
+    try {
+      for (const row of dados) {
+        const body = {
+          nome: String(row["nome"]||"").trim(),
+          cor: String(row["cor"]||"").trim() || null,
+          data_inicio: row["data_inicio"] || null,
+          data_fim: row["data_fim"] || null,
+          observacao: String(row["observacao"]||"").trim() || null,
+          id_time: idTime,
+        };
+        if (row["id"]) await api.patch(`time_interno?id_time_interno=eq.${row["id"]}`, body);
+        else await api.post("time_interno", body);
+      }
+      show("Importação concluída!"); setResultadoImport(null); reload();
+    } catch (e) { show(e.message, "error"); } finally { setSaving(false); }
+  }
+
+
+  function abrirNovo() { setForm({ nome:"", cor:"#E8A020", data_inicio:"", data_fim:"", observacao:"" }); setModal("novo"); }
+  function abrirEditar(t) {
+    setForm({
+      ...t,
+      data_inicio: t.data_inicio ? String(t.data_inicio).split("T")[0] : "",
+      data_fim:    t.data_fim ? String(t.data_fim).split("T")[0] : "",
+      cor: t.cor || "#E8A020",
+      observacao: t.observacao || "",
+    });
+    setModal(t);
+  }
+
+  async function salvar() {
+    if (!form.nome || !form.nome.trim()) { show("Nome obrigatório.", "error"); return; }
+    setSaving(true);
+    try {
+      const body = {
+        nome: form.nome.trim(),
+        cor: form.cor || null,
+        data_inicio: form.data_inicio || null,
+        data_fim: form.data_fim || null,
+        observacao: form.observacao || null,
+        id_time: idTime || null,
+      };
+      if (modal === "novo") await api.post("time_interno", body);
+      else await api.patch(`time_interno?id_time_interno=eq.${form.id_time_interno}`, body);
+      show("Salvo!"); setModal(null); reload();
+    } catch (e) { show(e.message, "error"); } finally { setSaving(false); }
+  }
+
+  if (loading) return <Spinner />;
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
+        <div style={{ fontSize:12, color:C.dim }}>Times internos da turma. Só os ativos (sem data de encerramento) aparecem ao montar um jogo.</div>
+        <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+          <BotoesImportExport
+            onExportar={() => exportarExcel(
+              (times||[]),
+              [
+                { key:"id_time_interno", label:"id",          width:8,  descricao:"NÃO altere. Vazio = novo." },
+                { key:"nome",            label:"nome",        width:25, descricao:"Nome do time interno. OBRIGATÓRIO." },
+                { key:"cor",             label:"cor",         width:12, descricao:"Cor em hex, ex: #E8A020." },
+                { key:"data_inicio",     label:"data_inicio", width:14, descricao:"Data de início (AAAA-MM-DD)." },
+                { key:"data_fim",        label:"data_fim",    width:14, descricao:"Data de encerramento (vazio = ativo)." },
+                { key:"observacao",      label:"observacao",  width:30, descricao:"Observações." },
+              ],
+              "times_internos",
+              ["- id preenchido = atualiza", "- id vazio = cria novo", "- nome é obrigatório"]
+            )}
+            onImportar={async (file) => {
+              setLoadingImport("ti");
+              try {
+                const rows = await lerExcel(file);
+                const erros = []; const validos = [];
+                rows.forEach((row, i) => {
+                  const linha = i + 2;
+                  if (!String(row["nome"]||"").trim()) { erros.push({ linha, mensagem: "Campo 'nome' é obrigatório." }); return; }
+                  validos.push(row);
+                });
+                setResultadoImport({ erros, validos: validos.length, mensagem: `${validos.filter(r=>r["id"]).length} atualizações + ${validos.filter(r=>!r["id"]).length} novos.`, _dados: validos });
+              } catch(e) { show(e.message, "error"); } finally { setLoadingImport(null); }
+            }}
+            loadingImport={loadingImport==="ti"}
+          />
+          {!readOnly && <Btn onClick={abrirNovo}>+ Novo Time Interno</Btn>}
+        </div>
+      </div>
+      <ModalImportacao resultado={resultadoImport} onClose={() => setResultadoImport(null)} onConfirmar={confirmarImport} salvando={saving}/>
+      <Card style={{ padding:0, overflow:"hidden" }}>
+        <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}><table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
+          <thead><tr style={{ background:C.surf2 }}>
+            {["Time","Início","Encerrado em","Situação",""].map(h => <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontSize:11, color:C.dim, textTransform:"uppercase", letterSpacing:"0.06em", fontWeight:700 }}>{h}</th>)}
+          </tr></thead>
+          <tbody>
+            {(times||[]).map((t,i) => (
+              <tr key={t.id_time_interno} style={{ background: i%2===0?C.surface:C.bg }}>
+                <td style={{ padding:"11px 14px", fontWeight:700 }}>
+                  <span style={{ display:"inline-block", width:13, height:13, borderRadius:"50%", background:t.cor||C.dim, marginRight:8, verticalAlign:"middle", border:`1px solid ${C.border}` }} />
+                  {t.nome}
+                </td>
+                <td style={{ padding:"11px 14px", color:C.dim, fontSize:12, whiteSpace:"nowrap" }}>{t.data_inicio ? new Date(t.data_inicio).toLocaleDateString("pt-BR") : "—"}</td>
+                <td style={{ padding:"11px 14px", color:C.dim, fontSize:12, whiteSpace:"nowrap" }}>{t.data_fim ? new Date(t.data_fim).toLocaleDateString("pt-BR") : "—"}</td>
+                <td style={{ padding:"11px 14px", fontSize:12 }}>{t.data_fim ? <span style={{ color:C.dim }}>Encerrado</span> : <span style={{ color:C.win, fontWeight:700 }}>Ativo</span>}</td>
+                <td style={{ padding:"11px 14px" }}>{!readOnly && <Btn variant="secondary" style={{ fontSize:11, padding:"5px 10px" }} onClick={() => abrirEditar(t)}>Editar</Btn>}</td>
+              </tr>
+            ))}
+            {(times||[]).length === 0 && (
+              <tr><td colSpan={5} style={{ padding:"20px 14px", textAlign:"center", color:C.dim, fontSize:13 }}>Nenhum time interno cadastrado ainda.</td></tr>
+            )}
+          </tbody>
+        </table></div>
+      </Card>
+      {modal && (
+        <Modal title={modal === "novo" ? "Novo Time Interno" : "Editar Time Interno"} onClose={() => setModal(null)}>
+          <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+            <Input label="Nome *" value={form.nome||""} onChange={e => set("nome", e.target.value)} placeholder="Ex: Laranja" />
+            <div>
+              <label style={{ display:"block", fontSize:12, color:C.dim, marginBottom:6 }}>Cor</label>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <input type="color" value={form.cor||"#E8A020"} onChange={e => set("cor", e.target.value)} style={{ width:48, height:38, border:`1px solid ${C.border}`, borderRadius:8, background:C.surf2, cursor:"pointer" }} />
+                <Input value={form.cor||""} onChange={e => set("cor", e.target.value)} placeholder="#E8A020" style={{ flex:1 }} />
+              </div>
+            </div>
+            <Input label="Data de início" type="date" value={form.data_inicio||""} onChange={e => set("data_inicio", e.target.value)} />
+            <Input label="Encerrado em (deixe vazio se ativo)" type="date" value={form.data_fim||""} onChange={e => set("data_fim", e.target.value)} />
+            <Input label="Observação" value={form.observacao||""} onChange={e => set("observacao", e.target.value)} />
+            <div style={{ display:"flex", justifyContent:"flex-end", gap:10, marginTop:8 }}>
+              <Btn variant="secondary" onClick={() => setModal(null)}>Cancelar</Btn>
+              <Btn onClick={salvar} disabled={saving || readOnly}>{saving ? "Salvando..." : readOnly ? "Somente Leitura" : "Salvar"}</Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ── ENCONTROS (turma fechada) ────────────────────────────────
+// Lista de encontros (como a lista de partidas) → abre a ficha do dia.
+// A ficha tem: jogos do rodízio (placar entre times internos) +
+// estatísticas agregadas por jogador no dia + validações.
+function ListaEncontros({ idTime, temporada, show, readOnly }) {
+  const [encontroSel, setEncontroSel] = useState(null);
+  const [novo, setNovo] = useState(false);
+  const { data: encontros, loading, reload } = useQuery(
+    () => temporada?.id_temporada
+      ? api.get(`encontro?id_temporada=eq.${temporada.id_temporada}&select=*,campo:id_campo(nome)&order=data.desc`)
+      : Promise.resolve([]),
+    [temporada]
+  );
+  const { data: lavagens } = useQuery(    () => temporada?.id_temporada
+      ? api.get(`vw_turma_lavagens?id_temporada=eq.${temporada.id_temporada}&select=*&order=lavagens.desc`)
+      : Promise.resolve([]),
+    [temporada]
+  );
+  const { data: jogadoresLista } = useQuery(
+    () => idTime ? api.get(`jogador?id_time=eq.${idTime}&id_jogador=gt.0&select=id_jogador,nome,apelido`) : Promise.resolve([]),
+    [idTime]
+  );
+  const nomeResponsavel = (id) => {
+    if (!id) return null;
+    const j = (jogadoresLista||[]).find(x => x.id_jogador === id);
+    return j ? (j.apelido || j.nome) : null;
+  };
+
+  if (!temporada) return <Card><div style={{ padding:20, color:C.dim }}>Crie uma temporada primeiro para registrar encontros.</div></Card>;
+  if (encontroSel || novo) {
+    return <FichaEncontro idTime={idTime} temporada={temporada} encontro={encontroSel} show={show} readOnly={readOnly}
+             onVoltar={() => { setEncontroSel(null); setNovo(false); reload(); }} />;
+  }
+  if (loading) return <Spinner />;
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
+        <div style={{ fontSize:12, color:C.dim }}>Encontros da temporada {temporada.nome || ""}. Clique para abrir o dia.</div>
+        {!readOnly && <Btn onClick={() => setNovo(true)}>+ Novo Encontro</Btn>}
+      </div>
+      <Card style={{ padding:0, overflow:"hidden" }}>
+        <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}><table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
+          <thead><tr style={{ background:C.surf2 }}>
+            {["Data","Local","Jogos","🧺 Lavagem","Situação",""].map(h => <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontSize:11, color:C.dim, textTransform:"uppercase", letterSpacing:"0.06em", fontWeight:700 }}>{h}</th>)}
+          </tr></thead>
+          <tbody>
+            {(encontros||[]).map((e,i) => (
+              <tr key={e.id_encontro} style={{ background: i%2===0?C.surface:C.bg, cursor:"pointer" }} onClick={() => setEncontroSel(e)}>
+                <td style={{ padding:"11px 14px", fontWeight:700, whiteSpace:"nowrap" }}>{fmtData(e.data)} {fmtHora(e.data)}</td>
+                <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{e.campo?.nome || "—"}</td>
+                <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{e._njogos != null ? e._njogos : ""}</td>
+                <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{nomeResponsavel(e.id_responsavel_lavagem) || "—"}</td>
+                <td style={{ padding:"11px 14px", fontSize:12 }}>
+                  {e.status === "pendente_conferencia"
+                    ? <span style={{ background:C.gold+"22", color:C.gold, fontWeight:700, padding:"2px 8px", borderRadius:5, fontSize:11 }}>Pendente conferência</span>
+                    : <span style={{ color:C.win }}>OK</span>}
+                </td>
+                <td style={{ padding:"11px 14px" }}><Btn variant="secondary" style={{ fontSize:11, padding:"5px 10px" }} onClick={(ev) => { ev.stopPropagation(); setEncontroSel(e); }}>Abrir</Btn></td>
+              </tr>
+            ))}
+            {(encontros||[]).length === 0 && (
+              <tr><td colSpan={5} style={{ padding:"20px 14px", textAlign:"center", color:C.dim, fontSize:13 }}>Nenhum encontro registrado nesta temporada.</td></tr>
+            )}
+          </tbody>
+        </table></div>
+      </Card>
+
+      {(lavagens||[]).length > 0 && (
+        <Card style={{ padding:0, overflow:"hidden" }}>
+          <div style={{ padding:"12px 16px", borderBottom:`1px solid ${C.border}`, fontSize:13, fontWeight:800, color:C.gold, textTransform:"uppercase", letterSpacing:"0.06em" }}>🧺 Ranking de lavagens do fardamento</div>
+          <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}><table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+            <thead><tr style={{ background:C.surf2 }}>
+              {["#","Jogador","Lavagens"].map((h,i) => <th key={i} style={{ padding:"8px 12px", textAlign:i===0?"center":"left", fontSize:10, color:C.dim, textTransform:"uppercase", fontWeight:700 }}>{h}</th>)}
+            </tr></thead>
+            <tbody>
+              {(lavagens||[]).map((j,i) => (
+                <tr key={j.id_jogador} style={{ borderBottom:`1px solid ${C.border}` }}>
+                  <td style={{ padding:"8px 12px", textAlign:"center", fontWeight:800, color:C.gold }}>{i===0?"🥇":i===1?"🥈":i===2?"🥉":(i+1)}</td>
+                  <td style={{ padding:"8px 12px", fontWeight:700 }}>{j.apelido || j.nome}</td>
+                  <td style={{ padding:"8px 12px" }}>{j.lavagens}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table></div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// Gera/exibe o link público de confirmação de presença (encontro/evento/partida).
+// Reutilizável: recebe tipo, idRef, idTime e a data (para definir expiração).
+function LinkConfirmacao({ tipo, idRef, idTime, dataRef, show }) {
+  const { data: links, reload } = useQuery(
+    () => (tipo && idRef) ? api.get(`link_confirmacao?tipo=eq.${tipo}&id_ref=eq.${idRef}&select=*&limit=1`) : Promise.resolve([]),
+    [tipo, idRef]
+  );
+  const [gerando, setGerando] = useState(false);
+  const link = links?.[0];
+  const urlBase = (typeof window !== "undefined") ? `${window.location.origin}/confirmar?t=` : "/confirmar?t=";
+
+  async function gerar() {
+    setGerando(true);
+    try {
+      const token = (crypto?.randomUUID ? crypto.randomUUID().replace(/-/g,"") : (Math.random().toString(36).slice(2)+Date.now().toString(36)+Math.random().toString(36).slice(2)));
+      const expira = dataRef ? new Date(new Date(dataRef).getTime() + 24*60*60*1000).toISOString() : null; // expira 1 dia após a data
+      await api.post("link_confirmacao", { token, tipo, id_ref: idRef, id_time: idTime, expira_em: expira });
+      show("Link de confirmação gerado!"); reload();
+    } catch (e) { show(e.message, "error"); } finally { setGerando(false); }
+  }
+  function copiar() {
+    const url = urlBase + link.token;
+    if (navigator?.clipboard) navigator.clipboard.writeText(url).then(() => show("Link copiado!")).catch(() => {});
+  }
+
+  return (
+    <Card style={{ background:C.surf2 }}>
+      <div style={{ fontSize:13, color:C.gold, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700, marginBottom:10 }}>📲 Link de confirmação de presença</div>
+      {!link ? (
+        <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+          <div style={{ fontSize:13, color:C.dim, flex:1, minWidth:180 }}>Gere um link para os jogadores confirmarem presença sem precisar de login. Compartilhe no WhatsApp.</div>
+          <Btn onClick={gerar} disabled={gerando}>{gerando ? "Gerando..." : "Gerar link"}</Btn>
+        </div>
+      ) : (
+        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+            <input readOnly value={urlBase + link.token} onFocus={e => e.target.select()}
+              style={{ flex:1, minWidth:200, background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, color:C.cream, fontSize:12, padding:"8px 10px", fontFamily:"monospace" }} />
+            <Btn onClick={copiar}>Copiar</Btn>
+          </div>
+          <div style={{ fontSize:11, color:C.dim }}>
+            {link.expira_em ? `Expira em ${new Date(link.expira_em).toLocaleDateString("pt-BR")} ${new Date(link.expira_em).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}.` : "Sem data de expiração."} Qualquer pessoa com o link pode responder pelos nomes da lista.
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function FichaEncontro({ idTime, temporada, encontro, show, readOnly, onVoltar }) {
+  const ehNovo = !encontro;
+  const [idEncontro, setIdEncontro] = useState(encontro?.id_encontro || null);
+  const [cabecalho, setCabecalho] = useState({
+    data: encontro?.data ? String(encontro.data).slice(0,10) : "",
+    hora: encontro?.data ? String(encontro.data).slice(11,16) : "",
+    id_campo: encontro?.id_campo ? String(encontro.id_campo) : "",
+    observacao: encontro?.observacao || "",
+    id_responsavel_lavagem: encontro?.id_responsavel_lavagem ? String(encontro.id_responsavel_lavagem) : "",
+  });
+  const [savingCab, setSavingCab] = useState(false);
+
+  // Times internos ativos (sem data_fim) + campos + jogadores ativos
+  const { data: timesInternos } = useQuery(() => idTime ? api.get(`time_interno?id_time=eq.${idTime}&data_fim=is.null&select=id_time_interno,nome,cor&order=nome.asc`) : Promise.resolve([]), [idTime]);
+  const { data: campos } = useQuery(() => idTime ? api.get(`campo?id_time=eq.${idTime}&select=id_campo,nome&order=nome.asc`) : Promise.resolve([]), [idTime]);
+  const { data: jogadores } = useQuery(() => idTime ? api.get(`jogador?id_jogador=gt.0&id_time=eq.${idTime}&select=id_jogador,nome,apelido,camisa&order=camisa.asc`) : Promise.resolve([]), [idTime]);
+
+  // Jogos e participações do encontro (quando já existe)
+  const { data: jogos, reload: reloadJogos } = useQuery(() => idEncontro ? api.get(`encontro_jogo?id_encontro=eq.${idEncontro}&select=*&order=ordem.asc.nullslast,id_encontro_jogo.asc`) : Promise.resolve([]), [idEncontro]);
+  const { data: parts, reload: reloadParts } = useQuery(() => idEncontro ? api.get(`encontro_participacao?id_encontro=eq.${idEncontro}&select=*,jogador(nome,apelido,camisa)&order=id_encontro_part.asc`) : Promise.resolve([]), [idEncontro]);
+
+  const mapaTI = {}; (timesInternos||[]).forEach(t => { mapaTI[t.id_time_interno] = t; });
+
+  // ── Salvar cabeçalho (cria o encontro) ──
+  async function salvarCabecalho() {
+    if (!cabecalho.data) { show("Informe a data do encontro.", "error"); return; }
+    setSavingCab(true);
+    try {
+      const _dataHora = `${cabecalho.data}T${cabecalho.hora || "12:00"}`;
+      const body = { id_temporada: temporada.id_temporada, data: new Date(_dataHora).toISOString(), id_campo: cabecalho.id_campo ? Number(cabecalho.id_campo) : null, observacao: cabecalho.observacao || null, id_responsavel_lavagem: cabecalho.id_responsavel_lavagem ? Number(cabecalho.id_responsavel_lavagem) : null };
+      if (idEncontro) { await api.patch(`encontro?id_encontro=eq.${idEncontro}`, body); show("Encontro atualizado."); }
+      else {
+        const r = await api.post("encontro", body);
+        const novoId = Array.isArray(r) ? r[0]?.id_encontro : r?.id_encontro;
+        setIdEncontro(novoId); show("Encontro criado. Agora adicione os jogos e a presença.");
+      }
+    } catch (e) { show(e.message, "error"); } finally { setSavingCab(false); }
+  }
+
+  // ── Totais e validações ──
+  const totalPlacares = (jogos||[]).reduce((s,j) => s + (j.placar_a||0) + (j.placar_b||0), 0);
+  const totalGolsJog  = (parts||[]).reduce((s,p) => s + (p.gols||0), 0);
+  const totalAssist   = (parts||[]).reduce((s,p) => s + (p.assistencias||0), 0);
+  const totalGolsContra = (parts||[]).reduce((s,p) => s + (p.gols_contra||0), 0);
+  const somaConfere = totalPlacares === (totalGolsJog + totalGolsContra);
+  const assistExcede = totalAssist > totalGolsJog;
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+      <Btn variant="secondary" onClick={onVoltar} style={{ alignSelf:"flex-start" }}>← Voltar</Btn>
+
+      {/* Cabeçalho do encontro */}
+      <Card>
+        <div style={{ fontSize:13, color:C.gold, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700, marginBottom:14 }}>Dados do encontro</div>
+        <div className="campos-encontro">
+          <Input label="Data *" type="date" value={cabecalho.data} onChange={e => setCabecalho(c => ({ ...c, data: e.target.value }))} />
+          <Input label="Hora" type="time" value={cabecalho.hora} onChange={e => setCabecalho(c => ({ ...c, hora: e.target.value }))} />
+          <Select label="Local" value={cabecalho.id_campo} onChange={e => setCabecalho(c => ({ ...c, id_campo: e.target.value }))}>
+            <option value="">—</option>
+            {(campos||[]).map(c => <option key={c.id_campo} value={c.id_campo}>{c.nome}</option>)}
+          </Select>
+          <Input label="Observação" value={cabecalho.observacao} onChange={e => setCabecalho(c => ({ ...c, observacao: e.target.value }))} />
+          <Select label="🧺 Responsável pela lavagem" value={cabecalho.id_responsavel_lavagem} onChange={e => setCabecalho(c => ({ ...c, id_responsavel_lavagem: e.target.value }))}>
+            <option value="">—</option>
+            {(jogadores||[]).map(j => <option key={j.id_jogador} value={j.id_jogador}>{j.apelido || j.nome}</option>)}
+          </Select>
+        </div>
+        {!readOnly && <div style={{ marginTop:12 }}><Btn onClick={salvarCabecalho} disabled={savingCab}>{savingCab ? "Salvando..." : idEncontro ? "Atualizar dados" : "Criar encontro"}</Btn></div>}
+      </Card>
+
+      {!idEncontro && <Card><div style={{ padding:16, color:C.dim, fontSize:13 }}>Salve os dados do encontro para liberar o cadastro de jogos e presença.</div></Card>}
+
+      {idEncontro && (
+        <>
+          {!readOnly && <LinkConfirmacao tipo="encontro" idRef={idEncontro} idTime={idTime} dataRef={cabecalho.data ? `${cabecalho.data}T${cabecalho.hora || "12:00"}` : null} show={show} />}
+          <JogosEncontro idEncontro={idEncontro} jogos={jogos||[]} timesInternos={timesInternos||[]} mapaTI={mapaTI} reload={reloadJogos} show={show} readOnly={readOnly} totalPlacares={totalPlacares} />
+          <PresencaEncontro idEncontro={idEncontro} parts={parts||[]} jogadores={jogadores||[]} timesInternos={timesInternos||[]} mapaTI={mapaTI} reload={reloadParts} show={show} readOnly={readOnly}
+            totais={{ totalPlacares, totalGolsJog, totalAssist, totalGolsContra, somaConfere, assistExcede }} statusAtual={encontro?.status} />
+        </>
+      )}
+    </div>
+  );
+}
+
+// Jogos do rodízio (placar entre times internos)
+function JogosEncontro({ idEncontro, jogos, timesInternos, mapaTI, reload, show, readOnly, totalPlacares }) {
+  const [form, setForm] = useState({ a:"", b:"", pa:"0", pb:"0" });
+  const [saving, setSaving] = useState(false);
+  const [loadingImport, setLoadingImport] = useState(null);
+  const [resultadoImport, setResultadoImport] = useState(null);
+
+  function exportarJogosFn() {
+    const dados = (jogos||[]).map(j => ({
+      id_encontro_jogo: j.id_encontro_jogo,
+      time_a: mapaTI[j.id_time_interno_a]?.nome || "", placar_a: j.placar_a||0,
+      placar_b: j.placar_b||0, time_b: mapaTI[j.id_time_interno_b]?.nome || "",
+      ordem: j.ordem||"", observacao: j.observacao||"",
+    }));
+    exportarExcel(dados, [
+      { key:"id_encontro_jogo", label:"id",       width:8,  descricao:"NÃO altere. Vazio = novo jogo." },
+      { key:"time_a",   label:"time_a",   width:16, descricao:"Nome exato do time interno A." },
+      { key:"placar_a", label:"placar_a", width:10, descricao:"Gols do time A." },
+      { key:"placar_b", label:"placar_b", width:10, descricao:"Gols do time B." },
+      { key:"time_b",   label:"time_b",   width:16, descricao:"Nome exato do time interno B." },
+      { key:"ordem",    label:"ordem",    width:8,  descricao:"Ordem do jogo no dia (opcional)." },
+      { key:"observacao", label:"observacao", width:30, descricao:"Observações." },
+    ], "jogos_encontro",
+    ["- time_a e time_b devem ser nomes exatos de times internos ativos.",
+     "- id preenchido atualiza; vazio cria novo jogo.", "- placares são números."]);
+  }
+
+  async function confirmarImport() {
+    const dados = resultadoImport?._dados || [];
+    setSaving(true);
+    try {
+      for (const row of dados) {
+        const na = String(row["time_a"]||"").trim().toUpperCase();
+        const nb = String(row["time_b"]||"").trim().toUpperCase();
+        const ta = (timesInternos||[]).find(t => t.nome.toUpperCase() === na);
+        const tb = (timesInternos||[]).find(t => t.nome.toUpperCase() === nb);
+        if (!ta || !tb) continue;
+        const body = {
+          id_encontro: idEncontro, id_time_interno_a: ta.id_time_interno, id_time_interno_b: tb.id_time_interno,
+          placar_a: Number(row["placar_a"])||0, placar_b: Number(row["placar_b"])||0,
+          ordem: row["ordem"] ? Number(row["ordem"]) : null, observacao: String(row["observacao"]||"").trim()||null,
+        };
+        if (row["id"]) await api.patch(`encontro_jogo?id_encontro_jogo=eq.${row["id"]}`, body);
+        else await api.post("encontro_jogo", body);
+      }
+      show("Jogos importados!"); setResultadoImport(null); reload();
+    } catch (e) { show(e.message, "error"); } finally { setSaving(false); }
+  }
+
+  async function addJogo() {
+    if (!form.a || !form.b) { show("Selecione os dois times internos.", "error"); return; }
+    if (form.a === form.b) { show("Os dois times devem ser diferentes.", "error"); return; }
+    setSaving(true);
+    try {
+      await api.post("encontro_jogo", { id_encontro: idEncontro, id_time_interno_a: Number(form.a), id_time_interno_b: Number(form.b), placar_a: Number(form.pa)||0, placar_b: Number(form.pb)||0, ordem: (jogos.length+1) });
+      setForm({ a:"", b:"", pa:"0", pb:"0" }); show("Jogo adicionado."); reload();
+    } catch (e) { show(e.message, "error"); } finally { setSaving(false); }
+  }
+  async function removerJogo(id) {
+    if (!confirm("Remover este jogo?")) return;
+    try { await api.delete(`encontro_jogo?id_encontro_jogo=eq.${id}`); show("Jogo removido."); reload(); }
+    catch (e) { show(e.message, "error"); }
+  }
+
+  return (
+    <Card>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8, marginBottom:14 }}>
+        <div style={{ fontSize:13, color:C.gold, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700 }}>Jogos do dia (rodízio)</div>
+        {!readOnly && (
+          <BotoesImportExport
+            onExportar={exportarJogosFn}
+            onImportar={async (file) => {
+              setLoadingImport("jogos");
+              try {
+                const rows = await lerExcel(file);
+                const erros = []; let validos = 0;
+                const tiNomes = new Set((timesInternos||[]).map(t => t.nome.toUpperCase()));
+                rows.forEach((row, i) => {
+                  const linha = i + 2;
+                  const na = String(row["time_a"]||"").trim().toUpperCase();
+                  const nb = String(row["time_b"]||"").trim().toUpperCase();
+                  if (!na || !nb) { erros.push({ linha, mensagem: "time_a e time_b são obrigatórios." }); return; }
+                  if (!tiNomes.has(na)) { erros.push({ linha, mensagem: `Time '${row["time_a"]}' não encontrado.` }); return; }
+                  if (!tiNomes.has(nb)) { erros.push({ linha, mensagem: `Time '${row["time_b"]}' não encontrado.` }); return; }
+                  if (na === nb) { erros.push({ linha, mensagem: "Os dois times devem ser diferentes." }); return; }
+                  validos++;
+                });
+                setResultadoImport({ erros, validos, mensagem: `${validos} jogo(s) a importar.`, _dados: rows });
+              } catch(e) { show(e.message, "error"); } finally { setLoadingImport(null); }
+            }}
+            loadingImport={loadingImport==="jogos"}
+          />
+        )}
+      </div>
+      <ModalImportacao resultado={resultadoImport} onClose={() => setResultadoImport(null)} onConfirmar={confirmarImport} salvando={saving}/>
+      {jogos.map(j => (
+        <div key={j.id_encontro_jogo} style={{ display:"flex", alignItems:"center", gap:8, background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 12px", marginBottom:6 }}>
+          <span style={{ display:"inline-block", width:12, height:12, borderRadius:"50%", background:mapaTI[j.id_time_interno_a]?.cor||C.dim }} />
+          <span style={{ fontSize:13 }}>{mapaTI[j.id_time_interno_a]?.nome || "?"}</span>
+          <span style={{ fontWeight:800, color:C.gold, fontSize:15 }}>{j.placar_a}</span>
+          <span style={{ color:C.dim, fontSize:11 }}>x</span>
+          <span style={{ fontWeight:800, color:C.gold, fontSize:15 }}>{j.placar_b}</span>
+          <span style={{ fontSize:13 }}>{mapaTI[j.id_time_interno_b]?.nome || "?"}</span>
+          <span style={{ display:"inline-block", width:12, height:12, borderRadius:"50%", background:mapaTI[j.id_time_interno_b]?.cor||C.dim }} />
+          {!readOnly && <Btn variant="secondary" style={{ marginLeft:"auto", fontSize:11, padding:"4px 8px" }} onClick={() => removerJogo(j.id_encontro_jogo)}>✕</Btn>}
+        </div>
+      ))}
+      {jogos.length === 0 && <div style={{ color:C.dim, fontSize:13, marginBottom:8 }}>Nenhum jogo ainda.</div>}
+      {!readOnly && (
+        <div style={{ display:"flex", gap:8, alignItems:"flex-end", marginTop:8, flexWrap:"wrap" }}>
+          <Select label="Time A" value={form.a} onChange={e => setForm(f => ({ ...f, a:e.target.value }))} style={{ minWidth:120 }}>
+            <option value="">—</option>{timesInternos.map(t => <option key={t.id_time_interno} value={t.id_time_interno}>{t.nome}</option>)}
+          </Select>
+          <Input label="Placar" type="number" min="0" value={form.pa} onChange={e => setForm(f => ({ ...f, pa:e.target.value }))} style={{ width:70 }} />
+          <Input label="Placar" type="number" min="0" value={form.pb} onChange={e => setForm(f => ({ ...f, pb:e.target.value }))} style={{ width:70 }} />
+          <Select label="Time B" value={form.b} onChange={e => setForm(f => ({ ...f, b:e.target.value }))} style={{ minWidth:120 }}>
+            <option value="">—</option>{timesInternos.map(t => <option key={t.id_time_interno} value={t.id_time_interno}>{t.nome}</option>)}
+          </Select>
+          <Btn onClick={addJogo} disabled={saving}>+ Jogo</Btn>
+        </div>
+      )}
+      <div style={{ fontSize:12, color:C.dim, marginTop:10 }}>Total de gols nos placares do dia: <b style={{ color:C.gold }}>{totalPlacares}</b></div>
+    </Card>
+  );
+}
+
+// Presença + estatísticas agregadas do jogador no dia
+function PresencaEncontro({ idEncontro, parts, jogadores, timesInternos, mapaTI, reload, show, readOnly, totais, statusAtual }) {
+  const [addJog, setAddJog] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [loadingImport, setLoadingImport] = useState(null);
+  const [resultadoImport, setResultadoImport] = useState(null);
+  const jaPresentes = new Set((parts||[]).map(p => p.id_jogador));
+  const disponiveis = (jogadores||[]).filter(j => !jaPresentes.has(j.id_jogador));
+
+  // Exporta as estatísticas do dia (com nome do jogador e do time interno resolvidos)
+  function exportarStats() {
+    const dados = (parts||[]).map(p => ({
+      id_jogador: p.id_jogador,
+      jogador: p.jogador?.apelido || p.jogador?.nome || "",
+      camisa: p.jogador?.camisa || "",
+      time_interno: mapaTI[p.id_time_interno]?.nome || "",
+      gols: p.gols||0, assistencias: p.assistencias||0, gols_contra: p.gols_contra||0,
+      amarelos: p.cartao_amarelo||0, vermelhos: p.cartao_vermelho||0, observacao: p.observacao||"",
+    }));
+    exportarExcel(dados, [
+      { key:"id_jogador",   label:"id_jogador",   width:10, descricao:"NÃO altere. Identifica o jogador." },
+      { key:"jogador",      label:"jogador",      width:22, descricao:"Nome (referência; não altere)." },
+      { key:"camisa",       label:"camisa",       width:8,  descricao:"Camisa (referência)." },
+      { key:"time_interno", label:"time_interno", width:16, descricao:"Nome EXATO do time interno do jogador no dia." },
+      { key:"gols",         label:"gols",         width:8,  descricao:"Gols no dia." },
+      { key:"assistencias", label:"assistencias", width:12, descricao:"Assistências no dia." },
+      { key:"gols_contra",  label:"gols_contra",  width:12, descricao:"Gols contra no dia." },
+      { key:"amarelos",     label:"amarelos",     width:10, descricao:"Cartões amarelos." },
+      { key:"vermelhos",    label:"vermelhos",    width:10, descricao:"Cartões vermelhos." },
+      { key:"observacao",   label:"observacao",   width:30, descricao:"Observações." },
+    ], "estatisticas_encontro",
+    ["- Exporte com os presentes já adicionados, preencha os números e reimporte.",
+     "- 'time_interno' deve ser o nome exato de um time interno ativo.",
+     "- Linhas com id_jogador em branco são ignoradas."]);
+  }
+
+  async function confirmarImport() {
+    const dados = resultadoImport?._dados || [];
+    setSaving(true);
+    try {
+      for (const row of dados) {
+        const idJog = Number(row["id_jogador"]); if (!idJog) continue;
+        const tiNome = String(row["time_interno"]||"").trim().toUpperCase();
+        const ti = (timesInternos||[]).find(t => t.nome.toUpperCase() === tiNome);
+        const existente = (parts||[]).find(p => p.id_jogador === idJog);
+        const body = {
+          id_encontro: idEncontro, id_jogador: idJog,
+          id_time_interno: ti ? ti.id_time_interno : (existente?.id_time_interno || null),
+          gols: Number(row["gols"])||0, assistencias: Number(row["assistencias"])||0,
+          gols_contra: Number(row["gols_contra"])||0, cartao_amarelo: Number(row["amarelos"])||0,
+          cartao_vermelho: Number(row["vermelhos"])||0, observacao: String(row["observacao"]||"").trim()||null,
+        };
+        if (existente) await api.patch(`encontro_participacao?id_encontro_part=eq.${existente.id_encontro_part}`, body);
+        else await api.post("encontro_participacao", body);
+      }
+      show("Estatísticas importadas!"); setResultadoImport(null); reload();
+    } catch (e) { show(e.message, "error"); } finally { setSaving(false); }
+  }
+
+
+  async function adicionarPresenca() {
+    if (!addJog) return;
+    setSaving(true);
+    try {
+      await api.post("encontro_participacao", { id_encontro: idEncontro, id_jogador: Number(addJog), id_time_interno: null, gols:0, assistencias:0, gols_contra:0, cartao_amarelo:0, cartao_vermelho:0 });
+      setAddJog(""); show("Presença registrada."); reload();
+    } catch (e) { show(e.message, "error"); } finally { setSaving(false); }
+  }
+  // Traz os confirmados "Vou" (jogadores cadastrados) como presença. Convidados são ignorados.
+  async function trazerConfirmados() {
+    setSaving(true);
+    try {
+      const links = await api.get(`link_confirmacao?tipo=eq.encontro&id_ref=eq.${idEncontro}&select=id_link&limit=1`);
+      if (!links?.[0]) { show("Nenhum link de confirmação foi gerado para este encontro.", "error"); setSaving(false); return; }
+      const confs = await api.get(`confirmacao_presenca?id_link=eq.${links[0].id_link}&status=eq.vou&id_jogador=not.is.null&select=id_jogador`);
+      const jaPresentesSet = new Set((parts||[]).map(p => p.id_jogador));
+      const aAdicionar = (confs||[]).filter(c => !jaPresentesSet.has(c.id_jogador));
+      const convidados = await api.get(`confirmacao_presenca?id_link=eq.${links[0].id_link}&status=eq.vou&id_jogador=is.null&select=id_confirmacao`);
+      if (aAdicionar.length === 0) {
+        show((convidados||[]).length > 0 ? `Todos os jogadores confirmados já estão na lista. ${convidados.length} convidado(s) foram ignorados.` : "Nenhum jogador novo confirmado para trazer.");
+        setSaving(false); return;
+      }
+      for (const c of aAdicionar) {
+        await api.post("encontro_participacao", { id_encontro: idEncontro, id_jogador: c.id_jogador, id_time_interno: null, gols:0, assistencias:0, gols_contra:0, cartao_amarelo:0, cartao_vermelho:0 });
+      }
+      const aviso = (convidados||[]).length > 0 ? ` (${convidados.length} convidado(s) ignorado(s) — cadastre-os como jogador se quiser incluí-los)` : "";
+      show(`${aAdicionar.length} jogador(es) confirmado(s) adicionado(s)!${aviso}`); reload();
+    } catch (e) { show(e.message, "error"); } finally { setSaving(false); }
+  }
+  async function atualizarCampo(p, campo, valor) {
+    try { await api.patch(`encontro_participacao?id_encontro_part=eq.${p.id_encontro_part}`, { [campo]: campo==="id_time_interno" ? (valor?Number(valor):null) : (Number(valor)||0) }); reload(); }
+    catch (e) { show(e.message, "error"); }
+  }
+  async function removerPresenca(id) {
+    if (!confirm("Remover este jogador do encontro?")) return;
+    try { await api.delete(`encontro_participacao?id_encontro_part=eq.${id}`); show("Removido."); reload(); }
+    catch (e) { show(e.message, "error"); }
+  }
+
+  // Salvar status (conferência): aplica regra de bloqueio e marca pendência
+  const [salvandoStatus, setSalvandoStatus] = useState(false);
+  async function salvarConferencia() {
+    if (totais.assistExcede) { show("Assistências do dia não podem passar os gols do dia. Ajuste antes de salvar.", "error"); return; }
+    setSalvandoStatus(true);
+    try {
+      const novoStatus = totais.somaConfere ? "ok" : "pendente_conferencia";
+      await api.patch(`encontro?id_encontro=eq.${idEncontro}`, { status: novoStatus });
+      show(totais.somaConfere ? "Encontro conferido e salvo (OK)." : "Salvo como pendente de conferência (a soma não fechou).");
+    } catch (e) { show(e.message, "error"); } finally { setSalvandoStatus(false); }
+  }
+
+  return (
+    <Card>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8, marginBottom:14 }}>
+        <div style={{ fontSize:13, color:C.gold, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700 }}>Presença e estatísticas do dia</div>
+        {!readOnly && (
+          <BotoesImportExport
+            onExportar={exportarStats}
+            onImportar={async (file) => {
+              setLoadingImport("stats");
+              try {
+                const rows = await lerExcel(file);
+                const erros = []; let validos = 0;
+                const tiNomes = new Set((timesInternos||[]).map(t => t.nome.toUpperCase()));
+                rows.forEach((row, i) => {
+                  const linha = i + 2;
+                  if (!Number(row["id_jogador"])) return; // ignora linha sem jogador
+                  const ti = String(row["time_interno"]||"").trim().toUpperCase();
+                  if (ti && !tiNomes.has(ti)) { erros.push({ linha, mensagem: `Time interno '${row["time_interno"]}' não encontrado.` }); return; }
+                  validos++;
+                });
+                setResultadoImport({ erros, validos, mensagem: `${validos} jogador(es) com estatísticas a importar.`, _dados: rows.filter(r => Number(r["id_jogador"])) });
+              } catch(e) { show(e.message, "error"); } finally { setLoadingImport(null); }
+            }}
+            loadingImport={loadingImport==="stats"}
+          />
+        )}
+      </div>
+      <ModalImportacao resultado={resultadoImport} onClose={() => setResultadoImport(null)} onConfirmar={confirmarImport} salvando={saving}/>
+      <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}><table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+        <thead><tr style={{ background:C.surf2 }}>
+          {["Jogador","Time interno","Gols","Assist.","G.Contra","🟨","🟥",""].map(h => <th key={h} style={{ padding:"7px 8px", textAlign:"left", fontSize:10, color:C.dim, textTransform:"uppercase", fontWeight:700 }}>{h}</th>)}
+        </tr></thead>
+        <tbody>
+          {(parts||[]).map(p => (
+            <tr key={p.id_encontro_part} style={{ borderBottom:`1px solid ${C.border}` }}>
+              <td style={{ padding:"6px 8px", fontWeight:700, whiteSpace:"nowrap" }}>{p.jogador?.apelido || p.jogador?.nome || "?"}</td>
+              <td style={{ padding:"6px 8px" }}>
+                <select disabled={readOnly} value={p.id_time_interno||""} onChange={e => atualizarCampo(p, "id_time_interno", e.target.value)} style={{ background:C.surf2, border:`1px solid ${C.border}`, borderRadius:5, color:C.cream, padding:"4px", fontSize:12 }}>
+                  <option value="">—</option>{timesInternos.map(t => <option key={t.id_time_interno} value={t.id_time_interno}>{t.nome}</option>)}
+                </select>
+              </td>
+              {["gols","assistencias","gols_contra","cartao_amarelo","cartao_vermelho"].map(campo => (
+                <td key={campo} style={{ padding:"6px 8px" }}>
+                  <input disabled={readOnly} type="number" min="0" defaultValue={p[campo]||0} onBlur={e => atualizarCampo(p, campo, e.target.value)} style={{ width:46, background:C.surf2, border:`1px solid ${C.border}`, borderRadius:5, color:C.cream, padding:"4px", fontSize:12 }} />
+                </td>
+              ))}
+              <td style={{ padding:"6px 8px" }}>{!readOnly && <Btn variant="secondary" style={{ fontSize:11, padding:"3px 7px" }} onClick={() => removerPresenca(p.id_encontro_part)}>✕</Btn>}</td>
+            </tr>
+          ))}
+          {(parts||[]).length === 0 && <tr><td colSpan={8} style={{ padding:"14px 8px", textAlign:"center", color:C.dim, fontSize:13 }}>Ninguém registrado ainda. Adicione os presentes abaixo.</td></tr>}
+        </tbody>
+      </table></div>
+
+      {!readOnly && (
+        <div className="presenca-acoes" style={{ display:"flex", gap:8, alignItems:"flex-end", marginTop:10, flexWrap:"wrap" }}>
+          <Select label="Adicionar presente" value={addJog} onChange={e => setAddJog(e.target.value)} style={{ minWidth:200, flex:1 }}>
+            <option value="">Selecione um jogador...</option>
+            {disponiveis.map(j => <option key={j.id_jogador} value={j.id_jogador}>#{j.camisa} — {j.apelido || j.nome}</option>)}
+          </Select>
+          <Btn onClick={adicionarPresenca} disabled={saving || !addJog}>+ Presença</Btn>
+          <Btn variant="secondary" onClick={trazerConfirmados} disabled={saving}>📲 Trazer confirmados</Btn>
+        </div>
+      )}
+      <div style={{ fontSize:12, color:C.dim, marginTop:6 }}>Para marcar presença, basta adicionar o jogador (mesmo com tudo zero).</div>
+
+      {/* Validações */}
+      <div style={{ marginTop:16, display:"flex", flexDirection:"column", gap:8 }}>
+        <div style={{ fontSize:12, color:C.dim }}>
+          Placares: <b style={{ color:C.gold }}>{totais.totalPlacares}</b> · Jogadores: <b style={{ color:C.gold }}>{totais.totalGolsJog}</b> gols + <b style={{ color:C.gold }}>{totais.totalGolsContra}</b> gol(s) contra = <b style={{ color:C.gold }}>{totais.totalGolsJog + totais.totalGolsContra}</b> · Assistências: <b style={{ color:C.gold }}>{totais.totalAssist}</b>
+        </div>
+        {totais.assistExcede && (
+          <div style={{ background:C.loss+"18", border:`1px solid ${C.loss}`, borderRadius:7, padding:"10px 12px", fontSize:12, color:"#ff8a87" }}>
+            🚫 Assistências ({totais.totalAssist}) não podem passar os gols dos jogadores ({totais.totalGolsJog}). Ajuste antes de salvar.
+          </div>
+        )}
+        {!totais.somaConfere && !totais.assistExcede && (
+          <div style={{ background:C.gold+"18", border:`1px solid ${C.gold}`, borderRadius:7, padding:"10px 12px", fontSize:12, color:C.gold }}>
+            ⚠️ A soma dos placares ({totais.totalPlacares}) não fecha com gols + gols contra ({totais.totalGolsJog + totais.totalGolsContra}). Você pode salvar mesmo assim — o encontro ficará pendente de conferência.
+          </div>
+        )}
+        {totais.somaConfere && !totais.assistExcede && (
+          <div style={{ background:C.win+"18", border:`1px solid ${C.win}`, borderRadius:7, padding:"10px 12px", fontSize:12, color:C.win }}>✅ A conta fecha: placares = gols + gols contra.</div>
+        )}
+        {!readOnly && (
+          <div><Btn onClick={salvarConferencia} disabled={salvandoStatus || totais.assistExcede}>{salvandoStatus ? "Salvando..." : "Salvar conferência"}</Btn></div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 // ── CRUD POSIÇÕES ─────────────────────────────────────────────
 function CrudPosicoes({ idTime, show, readOnly }) {
   // Tela de CONSULTA: o admin apenas visualiza as posições do tipo do seu time.
   // A gestão de posições é feita pelo super admin (no cadastro do Tipo de Time).
-  const { data: _timeInfoP } = useQuery(() => idTime ? api.get(`time?id_time=eq.${idTime}&select=id_tipo_time,tipo_time(descricao)&limit=1`) : Promise.resolve([]), [idTime]);
-  const _tipoTimeP = _timeInfoP?.[0]?.id_tipo_time;
-  const _tipoNomeP = _timeInfoP?.[0]?.tipo_time?.descricao;
+  const { data: _timeInfoP } = useQuery(() => idTime ? api.get(`time?id_time=eq.${idTime}&select=id_tipo_time,id_subtipo&limit=1`) : Promise.resolve([]), [idTime]);
+  const _tipoTimeP = _timeInfoP?.[0]?.id_subtipo || _timeInfoP?.[0]?.id_tipo_time;
+  const { data: _tiposP } = useQuery(() => api.get(`tipo_time?select=id_tipo_time,descricao`));
+  const _tipoNomeP = (_tiposP||[]).find(t => String(t.id_tipo_time) === String(_tipoTimeP))?.descricao;
   const { data: posicoes, loading, reload } = useQuery(() =>
     _tipoTimeP ? api.get(`posicao?id_tipo_time=eq.${_tipoTimeP}&select=*&order=ordem.asc,nome.asc`) : Promise.resolve([]), [_tipoTimeP]
   );
@@ -4852,15 +5802,21 @@ function ConfigTime({ idTime, show, readOnly }) {
   const [form, setForm]   = useState(null);
   const [saving, setSaving] = useState(false);
   const [tipoOriginal, setTipoOriginal] = useState("");
-  const [confirmaTroca, setConfirmaTroca] = useState(null); // {qtdJogadores} quando precisa confirmar troca de tipo
+  const [subtipoOriginal, setSubtipoOriginal] = useState("");
+  const [confirmaTroca, setConfirmaTroca] = useState(null); // {qtd, motivo:'tipo'|'subtipo'} quando precisa confirmar
   const [textoConfirma, setTextoConfirma] = useState("");
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  // É turma fechada? (pelo tipo selecionado no form)
+  const tipoSelecionado = (tipos||[]).find(t => String(t.id_tipo_time) === String(form?.id_tipo_time));
+  const ehTurmaFechada = !!tipoSelecionado?.eh_turma_fechada;
+  const subtiposDisponiveis = (tipos||[]).filter(t => !t.eh_turma_fechada);
 
   useEffect(() => {
     if (times?.[0] && !form) {
       const t = times[0];
-      setForm({ ...t, id_campo: t.id_campo ? String(t.id_campo) : "", id_cidade_sede: t.id_cidade_sede ? String(t.id_cidade_sede) : "", id_tipo_time: t.id_tipo_time ? String(t.id_tipo_time) : "", data_fundacao: t.data_fundacao ? t.data_fundacao.split("T")[0] : "" });
+      setForm({ ...t, id_campo: t.id_campo ? String(t.id_campo) : "", id_cidade_sede: t.id_cidade_sede ? String(t.id_cidade_sede) : "", id_tipo_time: t.id_tipo_time ? String(t.id_tipo_time) : "", id_subtipo: t.id_subtipo ? String(t.id_subtipo) : "", data_fundacao: t.data_fundacao ? t.data_fundacao.split("T")[0] : "" });
       setTipoOriginal(t.id_tipo_time ? String(t.id_tipo_time) : "");
+      setSubtipoOriginal(t.id_subtipo ? String(t.id_subtipo) : "");
       // Descobre a UF da cidade-sede atual para pré-selecionar o dropdown de estado
       if (t.id_cidade_sede) {
         api.get(`cidade?id_cidade=eq.${t.id_cidade_sede}&select=estado&limit=1`)
@@ -4884,19 +5840,33 @@ function ConfigTime({ idTime, show, readOnly }) {
 
   async function salvar() {
     if (!form?.nome) { show("Nome obrigatório.", "error"); return; }
-    // Detecta troca de tipo de time — operação sensível (zera posições dos jogadores)
+    // Detecta troca de tipo OU de subtipo — ambas zeram posições dos jogadores
     const tipoMudou = tipoOriginal && form.id_tipo_time && String(form.id_tipo_time) !== String(tipoOriginal);
-    if (tipoMudou && !confirmaTroca) {
+    const subtipoMudou = ehTurmaFechada && form.id_subtipo && String(form.id_subtipo) !== String(subtipoOriginal);
+    if ((tipoMudou || subtipoMudou) && !confirmaTroca) {
       try {
         const jogs = await api.get(`jogador?id_jogador=gt.0&id_time=eq.${form.id_time}&id_posicao=not.is.null&select=id_jogador`);
         setTextoConfirma("");
-        setConfirmaTroca({ qtd: (jogs||[]).length });
+        setConfirmaTroca({ qtd: (jogs||[]).length, motivo: tipoMudou ? "tipo" : "subtipo" });
       } catch {
-        setConfirmaTroca({ qtd: 0 });
+        setConfirmaTroca({ qtd: 0, motivo: tipoMudou ? "tipo" : "subtipo" });
       }
-      return; // espera a confirmação; o salvar real acontece em salvarDefinitivo()
+      return;
     }
     await salvarDefinitivo(false);
+  }
+
+  function aplicarSubtipo(id_sub) {
+    const sub = (tipos||[]).find(t => String(t.id_tipo_time) === String(id_sub));
+    setForm(f => ({ ...f,
+      id_subtipo: String(id_sub),
+      ...(sub ? {
+        numero_titulares: sub.numero_titulares,
+        quantidade_periodos: sub.quantidade_periodos,
+        minutos_padrao_periodo: sub.minutos_padrao_periodo,
+        permite_acrescimos: sub.permite_acrescimos,
+      } : {}),
+    }));
   }
 
   async function salvarDefinitivo(zerarPosicoes) {
@@ -4908,6 +5878,7 @@ function ConfigTime({ idTime, show, readOnly }) {
         id_campo: form.id_campo ? Number(form.id_campo) : null,
         id_cidade_sede: form.id_cidade_sede ? Number(form.id_cidade_sede) : null,
         id_tipo_time: form.id_tipo_time ? Number(form.id_tipo_time) : null,
+        id_subtipo: (ehTurmaFechada && form.id_subtipo) ? Number(form.id_subtipo) : null,
         valor_mensalidade: form.valor_mensalidade ? Number(form.valor_mensalidade) : null,
         saldo_inicial: form.saldo_inicial ? Number(form.saldo_inicial) : 0,
         data_fundacao: form.data_fundacao||null,
@@ -4936,6 +5907,7 @@ function ConfigTime({ idTime, show, readOnly }) {
         show("Configurações salvas!");
       }
       setTipoOriginal(form.id_tipo_time ? String(form.id_tipo_time) : "");
+      setSubtipoOriginal(form.id_subtipo ? String(form.id_subtipo) : "");
       setConfirmaTroca(null); setTextoConfirma("");
       reload();
     } catch (e) { show(e.message, "error"); }
@@ -5002,6 +5974,18 @@ function ConfigTime({ idTime, show, readOnly }) {
           </div>
         </div>
 
+        {ehTurmaFechada && (
+          <div className="cfg-grid-2" style={{ alignItems:"end" }}>
+            <Select label="Modalidade (subtipo)" value={form.id_subtipo||""} onChange={e => aplicarSubtipo(e.target.value)}>
+              <option value="">Selecione a modalidade...</option>
+              {subtiposDisponiveis.map(t => <option key={t.id_tipo_time} value={t.id_tipo_time}>{t.descricao}</option>)}
+            </Select>
+            <div style={{ fontSize:11, color:C.dim, fontStyle:"italic", paddingBottom:4 }}>
+              A turma usa as posições e regras da modalidade. Trocar a modalidade remove as posições dos jogadores.
+            </div>
+          </div>
+        )}
+
         {/* Regras do Jogo */}
         <div style={{ fontSize:11, color:C.gold, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700, borderLeft:`3px solid ${C.gold}`, paddingLeft:10 }}>Regras do Jogo</div>
         <div className="cfg-grid-auto">
@@ -5051,13 +6035,15 @@ function ConfigTime({ idTime, show, readOnly }) {
       </div>
 
       {confirmaTroca && (
-        <Modal title="⚠️ Trocar o tipo de time" onClose={() => { setConfirmaTroca(null); setTextoConfirma(""); }}>
+        <Modal title={confirmaTroca.motivo === "subtipo" ? "⚠️ Trocar a modalidade da turma" : "⚠️ Trocar o tipo de time"} onClose={() => { setConfirmaTroca(null); setTextoConfirma(""); }}>
           <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
             <div style={{ background:`${C.loss}1A`, border:`1px solid ${C.loss}55`, borderRadius:8, padding:"12px 14px", fontSize:14, color:C.cream, lineHeight:1.5 }}>
-              Cada tipo de time tem suas próprias posições. Ao trocar o tipo, <b>a posição de todos os jogadores será removida</b>
+              {confirmaTroca.motivo === "subtipo"
+                ? <>Cada modalidade tem suas próprias posições. Ao trocar a modalidade, <b>a posição de todos os jogadores será removida</b></>
+                : <>Cada tipo de time tem suas próprias posições. Ao trocar o tipo, <b>a posição de todos os jogadores será removida</b></>}
               {confirmaTroca.qtd > 0 ? <> — isso afeta <b>{confirmaTroca.qtd} jogador(es)</b> que têm posição definida.</> : "."}
               <br/><br/>
-              Você precisará <b>recadastrar a posição de cada jogador</b> com as posições do novo tipo. O histórico das partidas já jogadas é preservado.
+              Você precisará <b>recadastrar a posição de cada jogador</b> com as posições da {confirmaTroca.motivo === "subtipo" ? "nova modalidade" : "novo tipo"}. O histórico das partidas já jogadas é preservado.
               <br/><br/>
               <b>Esta ação não pode ser desfeita.</b>
             </div>

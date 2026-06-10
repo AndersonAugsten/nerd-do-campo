@@ -5,6 +5,7 @@ const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL || "https://nxztffulmvoh
 const SUPABASE_KEY = process.env.REACT_APP_SUPABASE_ANON || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im54enRmZnVsbXZvaGR1dnVkYmhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODY5ODMsImV4cCI6MjA5NTA2Mjk4M30.CwEmjukApMTJhkbKh1jlp4Q-IYrM26u-5SYx9p20nsg";
 
 let SESSION_TOKEN = sessionStorage.getItem("ndc_super_token") || null;
+let REFRESH_TOKEN = sessionStorage.getItem("ndc_super_refresh") || null;
 
 const UFS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 
@@ -17,7 +18,30 @@ async function sbAuth(path, body) {
   return res.json();
 }
 
-async function sb(path, opts = {}) {
+// Renova o access_token usando o refresh_token. Retorna true se renovou.
+async function renovarToken() {
+  if (!REFRESH_TOKEN) return false;
+  try {
+    const res = await sbAuth("token?grant_type=refresh_token", { refresh_token: REFRESH_TOKEN });
+    if (res?.access_token) {
+      SESSION_TOKEN = res.access_token;
+      sessionStorage.setItem("ndc_super_token", res.access_token);
+      if (res.refresh_token) { REFRESH_TOKEN = res.refresh_token; sessionStorage.setItem("ndc_super_refresh", res.refresh_token); }
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
+// Limpa a sessão e força relogin (chamado quando o refresh falha).
+function encerrarSessao() {
+  SESSION_TOKEN = null; REFRESH_TOKEN = null;
+  sessionStorage.removeItem("ndc_super_token");
+  sessionStorage.removeItem("ndc_super_refresh");
+  window.dispatchEvent(new CustomEvent("ndc-sessao-expirada"));
+}
+
+async function sb(path, opts = {}, _jaTentou = false) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     headers: {
       apikey: SUPABASE_KEY,
@@ -28,6 +52,13 @@ async function sb(path, opts = {}) {
     },
     ...opts,
   });
+  // Token expirado: tenta renovar UMA vez e repete a chamada.
+  if (res.status === 401 && !_jaTentou && SESSION_TOKEN) {
+    const renovou = await renovarToken();
+    if (renovou) return sb(path, opts, true);
+    encerrarSessao();
+    throw new Error("Sua sessão expirou. Faça login novamente.");
+  }
   if (!res.ok) { const e = await res.text(); throw new Error(e); }
   const txt = await res.text();
   return txt ? JSON.parse(txt) : null;
@@ -154,10 +185,10 @@ function BadgePendentes() {
   );
 }
 
-function LoginSuper({ onLogin }) {
+function LoginSuper({ onLogin, aviso }) {
   const [email, setEmail]   = useState("");
   const [senha, setSenha]   = useState("");
-  const [erro, setErro]     = useState("");
+  const [erro, setErro]     = useState(aviso || "");
   const [loading, setLoading] = useState(false);
 
   async function handleLogin() {
@@ -167,6 +198,7 @@ function LoginSuper({ onLogin }) {
     if (res.access_token) {
       SESSION_TOKEN = res.access_token;
       sessionStorage.setItem("ndc_super_token", res.access_token);
+      if (res.refresh_token) { REFRESH_TOKEN = res.refresh_token; sessionStorage.setItem("ndc_super_refresh", res.refresh_token); }
       // Verificar se é superadmin
       try {
         const check = await api.get(`usuario_time?user_id=eq.${res.user.id}&role=eq.superadmin`);
@@ -756,7 +788,7 @@ function ModalPermissoes({ user_id, id_time, nomeUsuario, onClose, show }) {
 // ══════════════════════════════════════════════════════════════
 function CrudSolicitacoes({ show, onMudou }) {
   const { data: solicitacoes, reload } = useQuery(() =>
-    api.get(`solicitacao_time?select=*,tipo_time(descricao)&order=criado_em.desc`)
+    api.get(`solicitacao_time?select=*&order=criado_em.desc`)
   );
   const { data: tipos } = useQuery(() => api.get(`tipo_time?select=*&status=eq.Ativo&order=descricao.asc`));
   const [modalSol, setModalSol] = useState(null);
@@ -800,10 +832,12 @@ function CrudSolicitacoes({ show, onMudou }) {
       let id_time = modalSol.id_time_criado || null;
       if (!id_time) {
         // Buscar os parâmetros padrão do tipo de time escolhido (períodos, titulares etc.)
+        // Se for turma fechada, os parâmetros vêm do SUBTIPO escolhido na solicitação.
         let paramsTipo = {};
-        if (modalSol.id_tipo_time) {
+        const idTipoParaParams = modalSol.id_subtipo || modalSol.id_tipo_time;
+        if (idTipoParaParams) {
           try {
-            const tt = await api.get(`tipo_time?id_tipo_time=eq.${modalSol.id_tipo_time}&select=numero_titulares,quantidade_periodos,minutos_padrao_periodo,permite_acrescimos&limit=1`);
+            const tt = await api.get(`tipo_time?id_tipo_time=eq.${idTipoParaParams}&select=numero_titulares,quantidade_periodos,minutos_padrao_periodo,permite_acrescimos&limit=1`);
             if (tt?.[0]) paramsTipo = {
               numero_titulares: tt[0].numero_titulares ?? 11,
               quantidade_periodos: tt[0].quantidade_periodos ?? 2,
@@ -815,6 +849,7 @@ function CrudSolicitacoes({ show, onMudou }) {
         const timeRes = await api.post(`time`, {
           nome: modalSol.nome_time,
           id_tipo_time: modalSol.id_tipo_time || null,
+          id_subtipo: modalSol.id_subtipo || null,
           data_fundacao: modalSol.data_fundacao || null,
           telefone: modalSol.telefone || null,
           id_cidade_sede: modalSol.id_cidade || null,
@@ -924,7 +959,7 @@ function CrudSolicitacoes({ show, onMudou }) {
                   <tr key={s.id} style={{ background:i%2===0?C.surface:C.bg }}>
                     <td style={{ padding:"11px 14px", color:C.dim, fontSize:11, whiteSpace:"nowrap" }}>{new Date(s.criado_em).toLocaleDateString("pt-BR")}</td>
                     <td style={{ padding:"11px 14px", fontWeight:700, color:C.cream }}>{s.nome_time}</td>
-                    <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{s.tipo_time?.descricao || "—"}</td>
+                    <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{(tipos||[]).find(t => String(t.id_tipo_time) === String(s.id_tipo_time))?.descricao || "—"}</td>
                     <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{s.cidade || "—"}</td>
                     <td style={{ padding:"11px 14px", color:C.dim }}>{s.nome_responsavel}</td>
                     <td style={{ padding:"11px 14px", color:C.gold, fontSize:12 }}>{s.email_responsavel}</td>
@@ -963,7 +998,8 @@ function CrudSolicitacoes({ show, onMudou }) {
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, fontSize:12 }}>
                 {[
                   ["Time",          modalSol.nome_time],
-                  ["Tipo",          modalSol.tipo_time?.descricao || "—"],
+                  ["Tipo",          (tipos||[]).find(t => String(t.id_tipo_time) === String(modalSol.id_tipo_time))?.descricao || "—"],
+                  ...(modalSol.id_subtipo ? [["Modalidade (subtipo)", (tipos||[]).find(t => String(t.id_tipo_time) === String(modalSol.id_subtipo))?.descricao || "—"]] : []),
                   ["Cidade",        modalSol.cidade || "—"],
                   ["Fundação",      modalSol.data_fundacao ? new Date(modalSol.data_fundacao+"T12:00:00").toLocaleDateString("pt-BR") : "—"],
                   ["Responsável",   modalSol.nome_responsavel],
@@ -1741,7 +1777,7 @@ function AjudaSuper() {
           Guia completo de gestão do sistema: times, mensalidades, solicitações,
           tipos, configurações, permissões e os fluxos do dia a dia.
         </div>
-        <a href="/manual-super.pdf?v=1.13.25" target="_blank" rel="noopener noreferrer"
+        <a href="/manual-super.pdf?v=1.0.0" target="_blank" rel="noopener noreferrer"
           style={{ display:"inline-flex", alignItems:"center", gap:10,
             background:C.gold, color:"#0B3D2E", borderRadius:10,
             padding:"14px 28px", fontFamily:"inherit", fontWeight:800,
@@ -1997,6 +2033,7 @@ function CrudTipoTime({ show }) {
         quantidade_periodos: Number(form.quantidade_periodos) || 2,
         minutos_padrao_periodo: Number(form.minutos_padrao_periodo) || 45,
         permite_acrescimos: form.permite_acrescimos || "S",
+        eh_turma_fechada: !!form.eh_turma_fechada,
       };
       if (modal === "novo") {
         await api.post(`tipo_time`, body);
@@ -2079,6 +2116,10 @@ function CrudTipoTime({ show }) {
                 </select>
               </div>
             </div>
+            <label style={{ display:"flex", alignItems:"center", gap:10, background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 14px", cursor:"pointer", fontSize:13 }}>
+              <input type="checkbox" checked={!!form.eh_turma_fechada} onChange={e => set("eh_turma_fechada", e.target.checked)} style={{ width:18, height:18, accentColor:C.gold }} />
+              <span><strong style={{ color:C.cream }}>É turma fechada</strong> <span style={{ color:C.dim }}>— grupo que joga entre si (racha/pelada). Times do tipo turma fechada escolhem um subtipo e usam encontros em vez de partidas.</span></span>
+            </label>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(130px, 1fr))", gap:12 }}>
               <Input label="Nº Titulares"    type="number" value={form.numero_titulares||""} onChange={e => set("numero_titulares", e.target.value)}/>
               <Input label="Qtd Períodos"    type="number" value={form.quantidade_periodos||""} onChange={e => set("quantidade_periodos", e.target.value)}/>
@@ -2101,9 +2142,16 @@ function CrudTipoTime({ show }) {
 
 export default function SuperApp() {
   const [session, setSession] = useState(SESSION_TOKEN ? {access_token: SESSION_TOKEN} : null);
-  const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.25";
+  const [sessaoExpirou, setSessaoExpirou] = useState(false);
+  const APP_VERSION = process.env.REACT_APP_VERSION || "1.0.0";
 
-  if (!session) return <LoginSuper onLogin={setSession}/>;
+  useEffect(() => {
+    const handler = () => { setSessaoExpirou(true); setSession(null); };
+    window.addEventListener("ndc-sessao-expirada", handler);
+    return () => window.removeEventListener("ndc-sessao-expirada", handler);
+  }, []);
+
+  if (!session) return <LoginSuper onLogin={(r) => { setSessaoExpirou(false); setSession(r); }} aviso={sessaoExpirou ? "Sua sessão expirou. Faça login novamente." : ""}/>;
 
   return (
     <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"'Oswald','Arial Narrow',Arial,sans-serif", color:C.cream }}>
@@ -2117,7 +2165,7 @@ export default function SuperApp() {
         )}
         <div style={{ fontSize:10, color:C.dim }}>v{APP_VERSION}</div>
         <div style={{ marginLeft:"auto" }}>
-          <Btn variant="danger" style={{ fontSize:11, padding:"6px 12px" }} onClick={()=>{ SESSION_TOKEN=null; sessionStorage.removeItem("ndc_super_token"); setSession(null); }}>Sair</Btn>
+          <Btn variant="danger" style={{ fontSize:11, padding:"6px 12px" }} onClick={()=>{ SESSION_TOKEN=null; REFRESH_TOKEN=null; sessionStorage.removeItem("ndc_super_token"); sessionStorage.removeItem("ndc_super_refresh"); setSession(null); }}>Sair</Btn>
         </div>
       </header>
       <main style={{ maxWidth:1100, margin:"0 auto", padding:"28px 24px" }}>

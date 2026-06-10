@@ -116,22 +116,42 @@ function SeletorTimes({ onSelect }) {
   const [dataRef, setDataRef] = useState(""); // vazio = sem filtro de data
   const [modalCadastro, setModalCadastro] = useState(false);
 
-  const { data: allTimes, loading } = useQuery(() => sb(`time?select=*,temporada(id_temporada,nome,data_inicio,data_fim,publico),tipo_time(id_tipo_time,descricao),cidade:id_cidade_sede(nome,estado),campo:id_campo(nome)&publico=eq.true&order=nome.asc`));
+  const { data: allTimes, loading } = useQuery(() => sb(`time?select=*,temporada(id_temporada,nome,data_inicio,data_fim,publico)&publico=eq.true&order=nome.asc`));
+  const { data: _cidades } = useQuery(() => sb(`cidade?select=id_cidade,nome,estado`));
+  const { data: _campos } = useQuery(() => sb(`campo?select=id_campo,nome`));
   const { data: tiposAtivos } = useQuery(() => sb(`tipo_time?select=*&status=eq.Ativo&order=descricao.asc`));
   const { data: configSistema } = useQuery(() => sb(`config_sistema?chave=eq.cadastro_time_ativo&select=valor&limit=1`));
   const cadastroAtivo = ["true","1"].includes(String(configSistema?.[0]?.valor ?? "").trim().toLowerCase());
   const tipoFutebolCampo = (tiposAtivos||[]).find(t => t.descricao.toLowerCase().includes("campo"))?.id_tipo_time || null;
   const [tipoFiltro, setTipoFiltro] = useState(null);
-  // Inicializar com Futebol de Campo quando tipos carregarem
-  useEffect(() => { if (tiposAtivos?.length && tipoFiltro === null) { const fc = (tiposAtivos||[]).find(t => t.descricao.toLowerCase().includes("campo")); setTipoFiltro(fc?.id_tipo_time || "todos"); } }, [tiposAtivos]);
+  // Mapa id_tipo_time -> descrição, para filtrar por NOME (robusto a tipos duplicados)
+  const descricaoDoTipo = useMemo(() => {
+    const m = new Map();
+    (tiposAtivos||[]).forEach(t => m.set(t.id_tipo_time, t.descricao));
+    return m;
+  }, [tiposAtivos]);
+  // Tipos únicos POR NOME (evita botões duplicados, ex: dois "Futebol de Campo")
+  const tiposUnicos = useMemo(() => {
+    const vistos = new Set(); const out = [];
+    (tiposAtivos||[]).forEach(t => { if (!vistos.has(t.descricao)) { vistos.add(t.descricao); out.push(t); } });
+    return out;
+  }, [tiposAtivos]);
+  // Abre em "Futebol de Campo" se existir; senão, "todos". Compara por NOME (robusto a duplicados).
+  useEffect(() => { if (tiposAtivos?.length && tipoFiltro === null) {
+    const temCampo = (tiposAtivos||[]).some(t => t.descricao.toLowerCase().includes("campo"));
+    const fc = (tiposAtivos||[]).find(t => t.descricao.toLowerCase().includes("campo"));
+    setTipoFiltro(temCampo ? fc.descricao : "todos");
+  } }, [tiposAtivos]);
 
-  // Filtrar times
+  // Filtrar times (e enriquecer com cidade/campo resolvidos das listas separadas)
   const times = useMemo(() => {
     if (!allTimes) return [];
+    const mapaCidade = new Map((_cidades||[]).map(c => [c.id_cidade, c]));
+    const mapaCampo = new Map((_campos||[]).map(c => [c.id_campo, c]));
     return allTimes.filter(t => {
       const tempsPublicas = (t.temporada||[]).filter(temp => temp.publico === true);
       if (!tempsPublicas.length) return false;
-      if (tipoFiltro && tipoFiltro !== "todos" && t.id_tipo_time !== tipoFiltro) return false;
+      if (tipoFiltro && tipoFiltro !== "todos" && descricaoDoTipo.get(t.id_tipo_time) !== tipoFiltro) return false;
       if (!dataRef) return true;
       return tempsPublicas.some(temp => {
         const inicio = temp.data_inicio ? new Date(temp.data_inicio) : null;
@@ -139,8 +159,12 @@ function SeletorTimes({ onSelect }) {
         const ref    = new Date(dataRef);
         return (!inicio || ref >= inicio) && (!fim || ref <= fim);
       });
-    });
-  }, [allTimes, dataRef, tipoFiltro]);
+    }).map(t => ({
+      ...t,
+      cidade: t.id_cidade_sede ? mapaCidade.get(t.id_cidade_sede) : null,
+      campo: t.id_campo ? mapaCampo.get(t.id_campo) : null,
+    }));
+  }, [allTimes, dataRef, tipoFiltro, _cidades, _campos, descricaoDoTipo]);
 
   const timesDestaque = useMemo(() => (times||[]).filter(t => t.destaque === true), [times]);
   const timesNormais  = useMemo(() => (times||[]).filter(t => !t.destaque), [times]);
@@ -189,9 +213,9 @@ function SeletorTimes({ onSelect }) {
               style={{ background: tipoFiltro==="todos" ? C.gold : C.surface, color: tipoFiltro==="todos" ? "#0B3D2E" : C.dim, border:`1px solid ${tipoFiltro==="todos" ? C.gold : C.border}`, borderRadius:8, padding:"7px 16px", fontFamily:"inherit", fontWeight:700, fontSize:12, cursor:"pointer", textTransform:"uppercase" }}>
               Todos
             </button>
-            {(tiposAtivos||[]).map(t => (
-              <button key={t.id_tipo_time} onClick={() => setTipoFiltro(t.id_tipo_time)}
-                style={{ background: tipoFiltro===t.id_tipo_time ? C.gold : C.surface, color: tipoFiltro===t.id_tipo_time ? "#0B3D2E" : C.dim, border:`1px solid ${tipoFiltro===t.id_tipo_time ? C.gold : C.border}`, borderRadius:8, padding:"7px 16px", fontFamily:"inherit", fontWeight:700, fontSize:12, cursor:"pointer", textTransform:"uppercase" }}>
+            {tiposUnicos.map(t => (
+              <button key={t.id_tipo_time} onClick={() => setTipoFiltro(t.descricao)}
+                style={{ background: tipoFiltro===t.descricao ? C.gold : C.surface, color: tipoFiltro===t.descricao ? "#0B3D2E" : C.dim, border:`1px solid ${tipoFiltro===t.descricao ? C.gold : C.border}`, borderRadius:8, padding:"7px 16px", fontFamily:"inherit", fontWeight:700, fontSize:12, cursor:"pointer", textTransform:"uppercase" }}>
                 {t.descricao}
               </button>
             ))}
@@ -281,7 +305,152 @@ function SeletorTimes({ onSelect }) {
 }
 
 // ── VISÃO GERAL ───────────────────────────────────────────────
+// Visão pública de uma TURMA FECHADA (aproveitamento dos times internos,
+// artilharia, assistências, presença, eficiência, goleadas).
+function VisaoGeralTurma({ temporada }) {
+  const tid = temporada.id_temporada;
+  const { data: aprov, loading: l1 } = useQuery(() => sb(`vw_turma_aproveitamento?id_temporada=eq.${tid}&select=*&order=aproveitamento.desc,gols_pro.desc`), [tid]);
+  const { data: jogs, loading: l2 }  = useQuery(() => sb(`vw_turma_jogador?id_temporada=eq.${tid}&select=*`), [tid]);
+  const { data: goleadas }           = useQuery(() => sb(`vw_turma_goleadas?id_temporada=eq.${tid}&select=*&order=diferenca.desc,total_gols.desc&limit=5`), [tid]);
+
+  if (l1 || l2) return <Spinner />;
+
+  const lista = (jogs || []);
+  const artilheiros = [...lista].filter(j => (j.gols||0) > 0).sort((a,b) => b.gols - a.gols).slice(0, 10);
+  const assistentes = [...lista].filter(j => (j.assistencias||0) > 0).sort((a,b) => b.assistencias - a.assistencias).slice(0, 10);
+  const presenca    = [...lista].sort((a,b) => b.presencas - a.presencas).slice(0, 10);
+  const eficiencia  = [...lista].filter(j => (j.presencas||0) >= 1 && (j.gols||0) > 0).sort((a,b) => (b.media_gols||0) - (a.media_gols||0)).slice(0, 10);
+  const nomeJog = j => j.apelido || j.nome || "?";
+  const medalha = i => i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i+1}`;
+
+  const SecTitle = ({ children }) => (
+    <div style={{ fontSize:13, fontWeight:800, color:C.gold, textTransform:"uppercase", letterSpacing:"0.08em", margin:"22px 0 12px" }}>{children}</div>
+  );
+  const RankTable = ({ cols, rows }) => (
+    <Card style={{ padding:0, overflow:"hidden" }}>
+      <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}><table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+        <thead><tr style={{ background:C.surf2 }}>{cols.map((c,i) => <th key={i} style={{ padding:"8px 10px", textAlign: i===0?"center":"left", fontSize:10, color:C.dim, textTransform:"uppercase", fontWeight:700 }}>{c}</th>)}</tr></thead>
+        <tbody>{rows}</tbody>
+      </table></div>
+    </Card>
+  );
+
+  if (lista.length === 0 && (aprov||[]).length === 0) {
+    return <Card><div style={{ padding:24, textAlign:"center", color:C.dim }}>Ainda não há encontros registrados nesta temporada.</div></Card>;
+  }
+
+  return (
+    <div>
+      {/* Aproveitamento dos times internos */}
+      <SecTitle>🏆 Aproveitamento dos times internos</SecTitle>
+      <Card style={{ padding:0, overflow:"hidden" }}>
+        <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}><table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+          <thead><tr style={{ background:C.surf2 }}>
+            {["Time","J","V","E","D","Gols","Aprov."].map((h,i) => <th key={i} style={{ padding:"8px 10px", textAlign:i===0?"left":"center", fontSize:10, color:C.dim, textTransform:"uppercase", fontWeight:700 }}>{h}</th>)}
+          </tr></thead>
+          <tbody>
+            {(aprov||[]).map(t => (
+              <tr key={t.id_time_interno} style={{ borderBottom:`1px solid ${C.border}` }}>
+                <td style={{ padding:"9px 10px", fontWeight:700 }}>
+                  <span style={{ display:"inline-block", width:12, height:12, borderRadius:"50%", background:t.cor||C.dim, marginRight:8, verticalAlign:"middle", border:`1px solid ${C.border}` }} />{t.nome}
+                </td>
+                <td style={{ padding:"9px 10px", textAlign:"center" }}>{t.jogos}</td>
+                <td style={{ padding:"9px 10px", textAlign:"center", color:C.win }}>{t.vitorias}</td>
+                <td style={{ padding:"9px 10px", textAlign:"center" }}>{t.empates}</td>
+                <td style={{ padding:"9px 10px", textAlign:"center", color:C.loss }}>{t.derrotas}</td>
+                <td style={{ padding:"9px 10px", textAlign:"center", color:C.dim }}>{t.gols_pro}:{t.gols_contra}</td>
+                <td style={{ padding:"9px 10px", textAlign:"center", fontWeight:800, color:C.gold }}>{t.aproveitamento}%</td>
+              </tr>
+            ))}
+          </tbody>
+        </table></div>
+      </Card>
+
+      {/* Artilheiros */}
+      {artilheiros.length > 0 && (<>
+        <SecTitle>⚽ Artilheiros</SecTitle>
+        <RankTable cols={["#","Jogador","Gols","Presenças"]} rows={artilheiros.map((j,i) => (
+          <tr key={j.id_jogador} style={{ borderBottom:`1px solid ${C.border}` }}>
+            <td style={{ padding:"8px 10px", textAlign:"center", fontWeight:800, color:C.gold }}>{medalha(i)}</td>
+            <td style={{ padding:"8px 10px", fontWeight:700 }}>{nomeJog(j)}</td>
+            <td style={{ padding:"8px 10px" }}>{j.gols}</td>
+            <td style={{ padding:"8px 10px", color:C.dim }}>{j.presencas}</td>
+          </tr>
+        ))} />
+      </>)}
+
+      {/* Assistências */}
+      {assistentes.length > 0 && (<>
+        <SecTitle>🅰️ Assistências</SecTitle>
+        <RankTable cols={["#","Jogador","Assist.","Presenças"]} rows={assistentes.map((j,i) => (
+          <tr key={j.id_jogador} style={{ borderBottom:`1px solid ${C.border}` }}>
+            <td style={{ padding:"8px 10px", textAlign:"center", fontWeight:800, color:C.gold }}>{medalha(i)}</td>
+            <td style={{ padding:"8px 10px", fontWeight:700 }}>{nomeJog(j)}</td>
+            <td style={{ padding:"8px 10px" }}>{j.assistencias}</td>
+            <td style={{ padding:"8px 10px", color:C.dim }}>{j.presencas}</td>
+          </tr>
+        ))} />
+      </>)}
+
+      {/* Presença */}
+      {presenca.length > 0 && (<>
+        <SecTitle>📅 Ranking de presença</SecTitle>
+        <RankTable cols={["#","Jogador","Presenças"]} rows={presenca.map((j,i) => (
+          <tr key={j.id_jogador} style={{ borderBottom:`1px solid ${C.border}` }}>
+            <td style={{ padding:"8px 10px", textAlign:"center", fontWeight:800, color:C.gold }}>{medalha(i)}</td>
+            <td style={{ padding:"8px 10px", fontWeight:700 }}>{nomeJog(j)}</td>
+            <td style={{ padding:"8px 10px" }}>{j.presencas}</td>
+          </tr>
+        ))} />
+      </>)}
+
+      {/* Eficiência */}
+      {eficiencia.length > 0 && (<>
+        <SecTitle>🎯 Média de gols por presença</SecTitle>
+        <RankTable cols={["#","Jogador","Gols","Pres.","Média"]} rows={eficiencia.map((j,i) => (
+          <tr key={j.id_jogador} style={{ borderBottom:`1px solid ${C.border}` }}>
+            <td style={{ padding:"8px 10px", textAlign:"center", fontWeight:800, color:C.gold }}>{medalha(i)}</td>
+            <td style={{ padding:"8px 10px", fontWeight:700 }}>{nomeJog(j)}</td>
+            <td style={{ padding:"8px 10px" }}>{j.gols}</td>
+            <td style={{ padding:"8px 10px", color:C.dim }}>{j.presencas}</td>
+            <td style={{ padding:"8px 10px", fontWeight:800, color:C.gold }}>{j.media_gols}</td>
+          </tr>
+        ))} />
+      </>)}
+
+      {/* Goleadas */}
+      {(goleadas||[]).length > 0 && (<>
+        <SecTitle>💥 Placares marcantes</SecTitle>
+        <Card>
+          {(goleadas||[]).map(g => (
+            <div key={g.id_encontro_jogo} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 0", borderBottom:`1px solid ${C.border}`, fontSize:13 }}>
+              <span style={{ display:"inline-block", width:11, height:11, borderRadius:"50%", background:g.cor_a||C.dim }} />
+              <span>{g.nome_a}</span>
+              <span style={{ fontWeight:800, color:C.gold }}>{g.placar_a} × {g.placar_b}</span>
+              <span>{g.nome_b}</span>
+              <span style={{ display:"inline-block", width:11, height:11, borderRadius:"50%", background:g.cor_b||C.dim }} />
+              <span style={{ marginLeft:"auto", fontSize:11, color:C.dim }}>{g.data ? new Date(g.data).toLocaleDateString("pt-BR") : ""}</span>
+            </div>
+          ))}
+        </Card>
+      </>)}
+    </div>
+  );
+}
+
 function VisaoGeral({ temporada }) {
+  // Detecta se o time desta temporada é turma fechada → delega para a visão própria.
+  const { data: _tdt } = useQuery(
+    () => temporada?.id_time ? sb(`time?id_time=eq.${temporada.id_time}&select=id_tipo_time&limit=1`) : Promise.resolve([]),
+    [temporada?.id_time]
+  );
+  const _idTipo = _tdt?.[0]?.id_tipo_time;
+  const { data: _tt } = useQuery(
+    () => _idTipo ? sb(`tipo_time?id_tipo_time=eq.${_idTipo}&select=eh_turma_fechada&limit=1`) : Promise.resolve([]),
+    [_idTipo]
+  );
+  const ehTurma = !!_tt?.[0]?.eh_turma_fechada;
+
   const { data: partidas, loading } = useQuery(
     () => sb(`partida?id_temporada=eq.${temporada.id_temporada}&select=*,adversario(nome),campo:id_campo(nome)&order=data.asc`),
     [temporada.id_temporada]
@@ -289,6 +458,7 @@ function VisaoGeral({ temporada }) {
   const { data: topGols }   = useQuery(() => sb(`vw_stats_temporada?id_temporada=eq.${temporada.id_temporada}&select=*&order=gols_marcados.desc&limit=5`), [temporada.id_temporada]);
   const { data: topAssist } = useQuery(() => sb(`vw_stats_temporada?id_temporada=eq.${temporada.id_temporada}&select=*&order=assistencias.desc&limit=5`), [temporada.id_temporada]);
 
+  if (ehTurma) return <VisaoGeralTurma temporada={temporada} />;
   if (loading) return <Spinner />;
 
   const jogadas = (partidas||[]).filter(p => p.cancelada !== "S" && p.gols_marcados !== null);
@@ -891,10 +1061,11 @@ const UFS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG"
 
 function ModalSolicitacao({ onClose }) {
   const [form, setForm] = useState({
-    nome_time:"", id_tipo_time:"", data_fundacao:"", cidade:"", id_cidade:"",
+    nome_time:"", id_tipo_time:"", id_subtipo:"", data_fundacao:"", cidade:"", id_cidade:"",
     nome_responsavel:"", email_responsavel:"", telefone:"",
   });
   const [uf, setUf] = useState("RS"); // RS é o padrão (público inicial)
+  const [modoJogo, setModoJogo] = useState(null); // null | "enfrenta" | "entre_si" — define como o time joga
   const [step, setStep]     = useState(1); // 1=dados, 2=confirmação
   const [saving, setSaving] = useState(false);
   const [enviado, setEnviado] = useState(false);
@@ -911,6 +1082,12 @@ function ModalSolicitacao({ onClose }) {
     if (!form.email_responsavel.trim())  return "E-mail é obrigatório.";
     if (!/\S+@\S+\.\S+/.test(form.email_responsavel)) return "E-mail inválido.";
     if (!form.telefone.trim())           return "Telefone é obrigatório.";
+    {
+      if (!modoJogo) return "Escolha como seu time joga.";
+      if (!form.id_tipo_time) return "Escolha a modalidade.";
+      const tipoSel = (tipos||[]).find(t => String(t.id_tipo_time) === String(form.id_tipo_time));
+      if (tipoSel?.eh_turma_fechada && !form.id_subtipo) return "Escolha a modalidade da turma (futsal, society, etc.).";
+    }
     return "";
   }
 
@@ -924,6 +1101,7 @@ function ModalSolicitacao({ onClose }) {
       const body = {
         nome_time:          form.nome_time.trim(),
         id_tipo_time:       form.id_tipo_time ? Number(form.id_tipo_time) : null,
+        id_subtipo:         form.id_subtipo ? Number(form.id_subtipo) : null,
         data_fundacao:      form.data_fundacao || null,
         cidade:             cidadeTexto,
         id_cidade:          form.id_cidade ? Number(form.id_cidade) : null,
@@ -991,14 +1169,66 @@ function ModalSolicitacao({ onClose }) {
                 style={{ width:"100%", background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8, color:C.cream, fontFamily:"inherit", fontSize:14, padding:"10px 12px", boxSizing:"border-box", outline:"none" }}/>
             </div>
 
+            {/* Passo 1: como o time joga — traduz tipo vs turma fechada numa pergunta simples */}
             <div>
-              <div style={{ fontSize:11, color:C.dim, marginBottom:4 }}>Tipo de Time</div>
-              <select value={form.id_tipo_time} onChange={e => set("id_tipo_time", e.target.value)}
-                style={{ width:"100%", background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8, color:C.cream, fontFamily:"inherit", fontSize:14, padding:"10px 12px" }}>
-                <option value="">Selecione...</option>
-                {(tipos||[]).map(t => <option key={t.id_tipo_time} value={t.id_tipo_time}>{t.descricao}</option>)}
-              </select>
+              <div style={{ fontSize:11, color:C.dim, marginBottom:6 }}>Como seu time joga?</div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                {(() => {
+                  const tipoTurma = (tipos||[]).find(t => t.eh_turma_fechada);
+                  const opcoes = [
+                    { id:"enfrenta", titulo:"Enfrentamos outros times", desc:"Jogos contra adversários (campeonato, amistosos)", emoji:"🆚" },
+                    { id:"entre_si", titulo:"Jogamos entre nós", desc:"Racha / pelada / turma fechada — o grupo joga entre si", emoji:"🤝" },
+                  ];
+                  return opcoes.map(op => {
+                    const ativo = modoJogo === op.id;
+                    const desabilitado = op.id === "entre_si" && !tipoTurma;
+                    return (
+                      <button key={op.id} type="button" disabled={desabilitado}
+                        onClick={() => {
+                          setModoJogo(op.id);
+                          if (op.id === "entre_si") { set("id_tipo_time", String(tipoTurma.id_tipo_time)); set("id_subtipo", ""); }
+                          else { set("id_tipo_time", ""); set("id_subtipo", ""); }
+                        }}
+                        style={{
+                          textAlign:"left", background: ativo ? C.gold : C.surf2,
+                          color: ativo ? "#0B3D2E" : (desabilitado ? C.border : C.cream),
+                          border:`1px solid ${ativo ? C.gold : C.border}`, borderRadius:10, padding:"12px 14px",
+                          fontFamily:"inherit", cursor: desabilitado ? "not-allowed" : "pointer", opacity: desabilitado ? 0.5 : 1,
+                        }}>
+                        <div style={{ fontSize:20, marginBottom:4 }}>{op.emoji}</div>
+                        <div style={{ fontSize:13.5, fontWeight:800, marginBottom:2 }}>{op.titulo}</div>
+                        <div style={{ fontSize:11, color: ativo ? "#0B3D2E" : C.dim, lineHeight:1.3 }}>{op.desc}</div>
+                      </button>
+                    );
+                  });
+                })()}
+              </div>
             </div>
+
+            {/* Passo 2a: enfrenta outros → escolhe o tipo (sem turma fechada na lista) */}
+            {modoJogo === "enfrenta" && (
+              <div>
+                <div style={{ fontSize:11, color:C.dim, marginBottom:4 }}>Modalidade</div>
+                <select value={form.id_tipo_time} onChange={e => { set("id_tipo_time", e.target.value); set("id_subtipo", ""); }}
+                  style={{ width:"100%", background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8, color:C.cream, fontFamily:"inherit", fontSize:14, padding:"10px 12px" }}>
+                  <option value="">Selecione...</option>
+                  {(tipos||[]).filter(t => !t.eh_turma_fechada).map(t => <option key={t.id_tipo_time} value={t.id_tipo_time}>{t.descricao}</option>)}
+                </select>
+              </div>
+            )}
+
+            {/* Passo 2b: joga entre si → escolhe só a modalidade (subtipo) */}
+            {modoJogo === "entre_si" && (
+              <div>
+                <div style={{ fontSize:11, color:C.dim, marginBottom:4 }}>Qual a modalidade da turma?</div>
+                <select value={form.id_subtipo||""} onChange={e => set("id_subtipo", e.target.value)}
+                  style={{ width:"100%", background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8, color:C.cream, fontFamily:"inherit", fontSize:14, padding:"10px 12px" }}>
+                  <option value="">Selecione a modalidade...</option>
+                  {(tipos||[]).filter(t => !t.eh_turma_fechada).map(t => <option key={t.id_tipo_time} value={t.id_tipo_time}>{t.descricao}</option>)}
+                </select>
+                <div style={{ fontSize:11, color:C.dim, marginTop:4 }}>Ex: futsal, society — define titulares e posições que sua turma vai usar.</div>
+              </div>
+            )}
 
             <div style={{ display:"grid", gridTemplateColumns:"110px 1fr", gap:12 }}>
               <div>
