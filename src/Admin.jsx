@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.41";
+const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.45";
 const UFS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 
 // Paleta de cores do sistema — declarada no topo para evitar "Cannot access 'C' before initialization"
@@ -1735,9 +1735,9 @@ function FichaPartida({ partida: p0, onVoltar, readOnly, idTime }) {
                   <tbody>
                     {(participacoes || []).map((pa, i) => (
                       <tr key={pa.id_participacao} style={{ background: i % 2 === 0 ? C.surface : C.bg }}>
-                        <td style={{ padding: "10px 12px", fontWeight: 800, color: C.gold }}>{pa.camisa}</td>
+                        <td style={{ padding: "10px 12px" }}><CamisaCell pa={pa} reload={reloadPart} show={show} readOnly={readOnly} /></td>
                         <td style={{ padding: "10px 12px", fontWeight: 700 }}>{pa.jogador?.apelido || pa.jogador?.nome}</td>
-                        <td style={{ padding: "10px 12px", color: C.dim, fontSize: 13 }}>{pa.posicao?.nome}</td>
+                        <td style={{ padding: "10px 12px" }}><PosicaoCell pa={pa} posicoes={posicoes} reload={reloadPart} show={show} readOnly={readOnly} /></td>
                         <td style={{ padding: "10px 12px", textAlign: "center" }}><ToggleCell pa={pa} field="titular" reload={reloadPart} show={show} /></td>
                         <td style={{ padding: "10px 12px", textAlign: "center" }}><ToggleCell pa={pa} field="capitao" reload={reloadPart} show={show} /></td>
                         <td style={{ padding: "10px 12px", textAlign: "center" }}><NumCell pa={pa} field="cartao_amarelo" reload={reloadPart} show={show} /></td>
@@ -2029,6 +2029,42 @@ function NumCell({ pa, field, reload, show }) {
 }
 
 // ── FORM ESCALAÇÃO ────────────────────────────────────────────
+// Célula editável de camisa (input inline)
+function CamisaCell({ pa, reload, show, readOnly }) {
+  const [val, setVal] = useState(pa.camisa || "");
+  const [editando, setEditando] = useState(false);
+  async function salvar() {
+    setEditando(false);
+    if (String(val) === String(pa.camisa || "")) return;
+    try { await api.patch(`participacao?id_participacao=eq.${pa.id_participacao}`, { camisa: val || null }); reload(); }
+    catch (e) { show(e.message, "error"); }
+  }
+  if (readOnly) return <span style={{ fontWeight:800, color:C.gold }}>{pa.camisa}</span>;
+  return editando
+    ? <input autoFocus value={val} onChange={e => setVal(e.target.value)} onBlur={salvar} onKeyDown={e => e.key==="Enter" && salvar()}
+        style={{ width:42, background:C.bg, border:`1px solid ${C.gold}`, borderRadius:4, color:C.cream, fontSize:13, padding:"4px 6px", fontFamily:"inherit", textAlign:"center" }} />
+    : <span onClick={() => setEditando(true)} style={{ fontWeight:800, color:C.gold, cursor:"pointer", borderBottom:`1px dotted ${C.gold}66` }}>{pa.camisa || "—"}</span>;
+}
+// Célula editável de posição (select inline)
+function PosicaoCell({ pa, posicoes, reload, show, readOnly }) {
+  const [editando, setEditando] = useState(false);
+  async function muda(novo) {
+    setEditando(false);
+    try { await api.patch(`participacao?id_participacao=eq.${pa.id_participacao}`, { id_posicao: novo ? Number(novo) : null }); reload(); }
+    catch (e) { show(e.message, "error"); }
+  }
+  if (readOnly) return <span style={{ color:C.dim, fontSize:13 }}>{pa.posicao?.nome}</span>;
+  const idsComFilhas = new Set((posicoes||[]).filter(p => p.id_posicao_pai).map(p => p.id_posicao_pai));
+  const opcoes = (posicoes||[]).filter(p => p.id_posicao_pai || !idsComFilhas.has(p.id_posicao));
+  return editando
+    ? <select autoFocus defaultValue={pa.id_posicao || ""} onChange={e => muda(e.target.value)} onBlur={() => setEditando(false)}
+        style={{ background:C.bg, border:`1px solid ${C.gold}`, borderRadius:4, color:C.cream, fontSize:12, padding:"4px 6px", fontFamily:"inherit" }}>
+        <option value="">—</option>
+        {opcoes.map(p => <option key={p.id_posicao} value={p.id_posicao}>{p.nome}</option>)}
+      </select>
+    : <span onClick={() => setEditando(true)} style={{ color:C.dim, fontSize:13, cursor:"pointer", borderBottom:`1px dotted ${C.dim}66` }}>{pa.posicao?.nome || "—"}</span>;
+}
+
 function FormEscalacao({ partida, jogadores, posicoes, participacoes, meuTime, onSalvo, show, readOnly = false }) {
   const jaEscalados = new Set((participacoes).map(p => p.id_jogador));
   const disponiveis = jogadores.filter(j => !jaEscalados.has(j.id_jogador));
@@ -2288,9 +2324,45 @@ const MENU_BASE = [
 // PÁGINA DE INÍCIO / ONBOARDING
 // ══════════════════════════════════════════════════════════════
 function PaginaInicio({ dados, onNavegar }) {
-  const { cidades, campos, posicoes, adversarios, jogadores, temporadas, partidas } = dados;
+  const { cidades, campos, posicoes, adversarios, jogadores, temporadas, partidas, ehTurmaFechada, timesInternos, encontros } = dados;
 
-  const etapas = [
+  const etapas = ehTurmaFechada ? [
+    {
+      numero: 1, titulo: "Posições", icone: "🎯", menu: "posicoes",
+      descricao: "Confira as posições da modalidade da turma (vêm da modalidade escolhida).",
+      exemplo: "Ex: Goleiro, Fixo, Ala, Pivô",
+      concluido: (posicoes||[]).length > 0, obrigatorio: true,
+      dica: "Definidas pela modalidade (subtipo) do time.",
+    },
+    {
+      numero: 2, titulo: "Times Internos", icone: "🎽", menu: "times_internos",
+      descricao: "Cadastre os times internos que se enfrentam na turma.",
+      exemplo: "Ex: Laranja, Preto, Branco",
+      concluido: (timesInternos||[]).length > 0, obrigatorio: true,
+      dica: "Os times fixos que jogam entre si nos encontros.",
+    },
+    {
+      numero: 3, titulo: "Jogadores", icone: "👕", menu: "jogadores",
+      descricao: "Cadastre os jogadores da turma com nome, camisa e posição.",
+      exemplo: "Ex: Dudu (camisa 9), Leo (camisa 5)",
+      concluido: (jogadores||[]).length > 0, obrigatorio: true,
+      dica: "Necessário para registrar presença e estatísticas.",
+    },
+    {
+      numero: 4, titulo: "Temporada", icone: "📆", menu: "temporadas",
+      descricao: "Configure a temporada atual com datas.",
+      exemplo: "Ex: Temporada 2025",
+      concluido: (temporadas||[]).length > 0, obrigatorio: true,
+      dica: "Necessária antes de registrar encontros.",
+    },
+    {
+      numero: 5, titulo: "Encontros", icone: "📅", menu: "partidas",
+      descricao: "Registre os encontros (dias de jogo) com os jogos do rodízio e a presença.",
+      exemplo: "Ex: Encontro de 21/06 — Laranja 3x2 Preto",
+      concluido: (encontros||[]).length > 0, obrigatorio: true,
+      dica: "O coração da turma: jogos e estatísticas de cada dia.",
+    },
+  ] : [
     {
       numero: 1,
       titulo: "Campos",
@@ -3781,8 +3853,15 @@ export default function AdminAppCompleto() {
   const { data: _jogadores }  = useQuery(() => idTime ? api.get(`jogador?id_time=eq.${idTime}&id_jogador=gt.0&select=id_jogador&limit=1`) : Promise.resolve([]), [session, idTime]);
   const _idsTemp = (temporadas||[]).map(t=>t.id_temporada).join(",");
   const { data: _partidas }   = useQuery(() => _idsTemp ? api.get(`partida?id_temporada=in.(${_idsTemp})&select=id_partida&limit=1`) : Promise.resolve([]), [_idsTemp]);
+  const { data: _timesInternos } = useQuery(() => idTime ? api.get(`time_interno?id_time=eq.${idTime}&select=id_time_interno&limit=1`) : Promise.resolve([]), [session, idTime]);
+  const { data: _encontros }  = useQuery(() => _idsTemp ? api.get(`encontro?id_temporada=in.(${_idsTemp})&select=id_encontro&limit=1`) : Promise.resolve([]), [_idsTemp]);
   const [temporadaSel, setTemporadaSel] = useState(null);
-  useEffect(() => { if (temporadas?.length && !temporadaSel) setTemporadaSel(temporadas[0]); }, [temporadas]);
+  useEffect(() => {
+    const lista = temporadas || [];
+    if (lista.length === 0) { if (temporadaSel) setTemporadaSel(null); return; }
+    const aindaValida = temporadaSel && lista.some(t => t.id_temporada === temporadaSel.id_temporada);
+    if (!aindaValida) setTemporadaSel(lista[0]);
+  }, [temporadas]);
 
   if (loadManut) return null;
 
@@ -3861,6 +3940,37 @@ export default function AdminAppCompleto() {
 
   return (
     <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"'Oswald','Arial Narrow',Arial,sans-serif", color:C.cream, display:"flex", flexDirection:"column" }}>
+      <style>{`
+        /* ── Responsividade mobile (retrato) ── */
+        @media(max-width:768px){
+          .admin-header{padding:0 12px !important; gap:8px !important;}
+          .header-time-nome{display:none;}
+          .admin-layout{flex-direction:column !important;}
+          /* Sidebar vira barra horizontal rolável no topo do conteúdo */
+          .admin-sidebar{
+            width:100% !important; height:auto !important; position:sticky; top:64px;
+            display:flex !important; flex-direction:row !important; overflow-x:auto; overflow-y:hidden;
+            border-right:none !important; border-bottom:1px solid var(--ndc-border,#1F5C3E);
+            padding:6px 8px !important; gap:4px; -webkit-overflow-scrolling:touch; z-index:90;
+          }
+          .admin-sidebar .menu-grupo{display:flex; flex-direction:row; align-items:center; flex-shrink:0;}
+          .admin-sidebar .menu-grupo-titulo{display:none !important;}
+          .admin-sidebar button{
+            white-space:nowrap; flex-shrink:0; border-left:none !important;
+            border-bottom:3px solid transparent; padding:8px 12px !important; font-size:11px !important;
+          }
+          .admin-main{padding:16px 12px !important;}
+          /* Grids de formulário viram 1 coluna */
+          .form-grid-2, .form-grid-3, .form-grid-auto{grid-template-columns:1fr !important;}
+          /* Campos em flex-wrap ocupam a largura toda */
+          .campo-flex{min-width:100% !important; flex:1 1 100% !important;}
+          .campos-encontro > div{min-width:100% !important; flex:1 1 100% !important;}
+        }
+        /* Grids reutilizáveis (desktop) */
+        .form-grid-2{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+        .form-grid-3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;}
+        .form-grid-auto{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px;}
+      `}</style>
       <Toast {...(toast||{msg:null})} />
 
       {/* Header */}
@@ -3965,7 +4075,7 @@ export default function AdminAppCompleto() {
           )}
           {menu === "inicio" && (
             <PaginaInicio
-              dados={{ cidades:_cidades, campos:_campos, posicoes:_posicoes, adversarios:_adversarios, jogadores:_jogadores, temporadas, partidas:_partidas }}
+              dados={{ cidades:_cidades, campos:_campos, posicoes:_posicoes, adversarios:_adversarios, jogadores:_jogadores, temporadas, partidas:_partidas, ehTurmaFechada, timesInternos:_timesInternos, encontros:_encontros }}
               onNavegar={setMenu}
             />
           )}
@@ -4110,14 +4220,14 @@ function CrudJogadores({ idTime, show, readOnly }) {
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  function abrirNovo() { setForm({ nome:"", apelido:"", camisa:"", id_posicao:"", telefone:"", email:"", data_inicio:"", observacoes:"" }); setModal("novo"); }
+  function abrirNovo() { setForm({ nome:"", apelido:"", camisa:"", id_posicao:"", telefone:"", email:"", data_nascimento:"", data_inicio:"", observacoes:"" }); setModal("novo"); }
   function abrirEditar(j) { setForm({ ...j, id_posicao: j.id_posicao ? String(j.id_posicao) : "" }); setModal(j); }
 
   async function salvar() {
     if (!form.nome) { show("Nome obrigatório.", "error"); return; }
     setSaving(true);
     try {
-      const body = { nome: form.nome, apelido: form.apelido||null, camisa: form.camisa||null, id_posicao: form.id_posicao ? Number(form.id_posicao) : null, telefone: form.telefone||null, email: form.email||null, data_inicio: form.data_inicio||null, observacoes: form.observacoes||null, foto_url: form.foto_url||null, id_time: idTime||null };
+      const body = { nome: form.nome, apelido: form.apelido||null, camisa: form.camisa||null, id_posicao: form.id_posicao ? Number(form.id_posicao) : null, telefone: form.telefone||null, email: form.email||null, data_nascimento: form.data_nascimento||null, data_inicio: form.data_inicio||null, observacoes: form.observacoes||null, foto_url: form.foto_url||null, id_time: idTime||null };
       if (modal === "novo") await api.post("jogador", body);
       else await api.patch(`jogador?id_jogador=eq.${form.id_jogador}`, body);
       show(modal === "novo" ? "Jogador criado!" : "Jogador atualizado!"); setModal(null); reload();
@@ -4254,6 +4364,9 @@ function CrudJogadores({ idTime, show, readOnly }) {
                     .map(p => <option key={p.id_posicao} value={p.id_posicao}>{p.nome}</option>);
                 })()}
               </Select>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+              <Input label="Data de nascimento" type="date" value={form.data_nascimento ? String(form.data_nascimento).split("T")[0] : ""} onChange={e => set("data_nascimento", e.target.value)} />
             </div>
             {(posicoes||[]).length === 0 && (
               <div style={{ fontSize:12, color:C.gold, marginTop:-4 }}>
@@ -4730,12 +4843,20 @@ function ListaEncontros({ idTime, temporada, show, readOnly }) {
       : Promise.resolve([]),
     [temporada]
   );
-  const { data: lavagens } = useQuery(
-    () => temporada?.id_temporada
+  const { data: lavagens } = useQuery(    () => temporada?.id_temporada
       ? api.get(`vw_turma_lavagens?id_temporada=eq.${temporada.id_temporada}&select=*&order=lavagens.desc`)
       : Promise.resolve([]),
     [temporada]
   );
+  const { data: jogadoresLista } = useQuery(
+    () => idTime ? api.get(`jogador?id_time=eq.${idTime}&id_jogador=gt.0&select=id_jogador,nome,apelido`) : Promise.resolve([]),
+    [idTime]
+  );
+  const nomeResponsavel = (id) => {
+    if (!id) return null;
+    const j = (jogadoresLista||[]).find(x => x.id_jogador === id);
+    return j ? (j.apelido || j.nome) : null;
+  };
 
   if (!temporada) return <Card><div style={{ padding:20, color:C.dim }}>Crie uma temporada primeiro para registrar encontros.</div></Card>;
   if (encontroSel || novo) {
@@ -4753,7 +4874,7 @@ function ListaEncontros({ idTime, temporada, show, readOnly }) {
       <Card style={{ padding:0, overflow:"hidden" }}>
         <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}><table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
           <thead><tr style={{ background:C.surf2 }}>
-            {["Data","Local","Jogos","Situação",""].map(h => <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontSize:11, color:C.dim, textTransform:"uppercase", letterSpacing:"0.06em", fontWeight:700 }}>{h}</th>)}
+            {["Data","Local","Jogos","🧺 Lavagem","Situação",""].map(h => <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontSize:11, color:C.dim, textTransform:"uppercase", letterSpacing:"0.06em", fontWeight:700 }}>{h}</th>)}
           </tr></thead>
           <tbody>
             {(encontros||[]).map((e,i) => (
@@ -4761,6 +4882,7 @@ function ListaEncontros({ idTime, temporada, show, readOnly }) {
                 <td style={{ padding:"11px 14px", fontWeight:700, whiteSpace:"nowrap" }}>{fmtData(e.data)} {fmtHora(e.data)}</td>
                 <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{e.campo?.nome || "—"}</td>
                 <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{e._njogos != null ? e._njogos : ""}</td>
+                <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{nomeResponsavel(e.id_responsavel_lavagem) || "—"}</td>
                 <td style={{ padding:"11px 14px", fontSize:12 }}>
                   {e.status === "pendente_conferencia"
                     ? <span style={{ background:C.gold+"22", color:C.gold, fontWeight:700, padding:"2px 8px", borderRadius:5, fontSize:11 }}>Pendente conferência</span>
@@ -4900,8 +5022,8 @@ function FichaEncontro({ idTime, temporada, encontro, show, readOnly, onVoltar }
       {/* Cabeçalho do encontro */}
       <Card>
         <div style={{ fontSize:13, color:C.gold, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700, marginBottom:14 }}>Dados do encontro</div>
-        <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
-          <Input label="Data e hora *" type="datetime-local" value={cabecalho.data} onChange={e => setCabecalho(c => ({ ...c, data: e.target.value }))} style={{ minWidth:200 }} />
+        <div className="campos-encontro" style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
+          <Input label="Data e hora *" type="datetime-local" value={cabecalho.data} onChange={e => setCabecalho(c => ({ ...c, data: e.target.value }))} style={{ minWidth:160, flex:1 }} />
           <Select label="Local" value={cabecalho.id_campo} onChange={e => setCabecalho(c => ({ ...c, id_campo: e.target.value }))} style={{ minWidth:160 }}>
             <option value="">—</option>
             {(campos||[]).map(c => <option key={c.id_campo} value={c.id_campo}>{c.nome}</option>)}
@@ -5261,9 +5383,10 @@ function PresencaEncontro({ idEncontro, parts, jogadores, timesInternos, mapaTI,
 function CrudPosicoes({ idTime, show, readOnly }) {
   // Tela de CONSULTA: o admin apenas visualiza as posições do tipo do seu time.
   // A gestão de posições é feita pelo super admin (no cadastro do Tipo de Time).
-  const { data: _timeInfoP } = useQuery(() => idTime ? api.get(`time?id_time=eq.${idTime}&select=id_tipo_time,id_subtipo,tipo_time!id_tipo_time(descricao),subtipo:id_subtipo(descricao)&limit=1`) : Promise.resolve([]), [idTime]);
+  const { data: _timeInfoP } = useQuery(() => idTime ? api.get(`time?id_time=eq.${idTime}&select=id_tipo_time,id_subtipo&limit=1`) : Promise.resolve([]), [idTime]);
   const _tipoTimeP = _timeInfoP?.[0]?.id_subtipo || _timeInfoP?.[0]?.id_tipo_time;
-  const _tipoNomeP = _timeInfoP?.[0]?.tipo_time?.descricao;
+  const { data: _tiposP } = useQuery(() => api.get(`tipo_time?select=id_tipo_time,descricao`));
+  const _tipoNomeP = (_tiposP||[]).find(t => String(t.id_tipo_time) === String(_tipoTimeP))?.descricao;
   const { data: posicoes, loading, reload } = useQuery(() =>
     _tipoTimeP ? api.get(`posicao?id_tipo_time=eq.${_tipoTimeP}&select=*&order=ordem.asc,nome.asc`) : Promise.resolve([]), [_tipoTimeP]
   );

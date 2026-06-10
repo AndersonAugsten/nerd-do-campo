@@ -788,7 +788,7 @@ function ModalPermissoes({ user_id, id_time, nomeUsuario, onClose, show }) {
 // ══════════════════════════════════════════════════════════════
 function CrudSolicitacoes({ show, onMudou }) {
   const { data: solicitacoes, reload } = useQuery(() =>
-    api.get(`solicitacao_time?select=*,tipo_time!id_tipo_time(descricao)&order=criado_em.desc`)
+    api.get(`solicitacao_time?select=*&order=criado_em.desc`)
   );
   const { data: tipos } = useQuery(() => api.get(`tipo_time?select=*&status=eq.Ativo&order=descricao.asc`));
   const [modalSol, setModalSol] = useState(null);
@@ -959,7 +959,7 @@ function CrudSolicitacoes({ show, onMudou }) {
                   <tr key={s.id} style={{ background:i%2===0?C.surface:C.bg }}>
                     <td style={{ padding:"11px 14px", color:C.dim, fontSize:11, whiteSpace:"nowrap" }}>{new Date(s.criado_em).toLocaleDateString("pt-BR")}</td>
                     <td style={{ padding:"11px 14px", fontWeight:700, color:C.cream }}>{s.nome_time}</td>
-                    <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{s.tipo_time?.descricao || "—"}</td>
+                    <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{(tipos||[]).find(t => String(t.id_tipo_time) === String(s.id_tipo_time))?.descricao || "—"}</td>
                     <td style={{ padding:"11px 14px", color:C.dim, fontSize:12 }}>{s.cidade || "—"}</td>
                     <td style={{ padding:"11px 14px", color:C.dim }}>{s.nome_responsavel}</td>
                     <td style={{ padding:"11px 14px", color:C.gold, fontSize:12 }}>{s.email_responsavel}</td>
@@ -998,7 +998,7 @@ function CrudSolicitacoes({ show, onMudou }) {
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, fontSize:12 }}>
                 {[
                   ["Time",          modalSol.nome_time],
-                  ["Tipo",          modalSol.tipo_time?.descricao || "—"],
+                  ["Tipo",          (tipos||[]).find(t => String(t.id_tipo_time) === String(modalSol.id_tipo_time))?.descricao || "—"],
                   ...(modalSol.id_subtipo ? [["Modalidade (subtipo)", (tipos||[]).find(t => String(t.id_tipo_time) === String(modalSol.id_subtipo))?.descricao || "—"]] : []),
                   ["Cidade",        modalSol.cidade || "—"],
                   ["Fundação",      modalSol.data_fundacao ? new Date(modalSol.data_fundacao+"T12:00:00").toLocaleDateString("pt-BR") : "—"],
@@ -2143,7 +2143,7 @@ function CrudTipoTime({ show }) {
 export default function SuperApp() {
   const [session, setSession] = useState(SESSION_TOKEN ? {access_token: SESSION_TOKEN} : null);
   const [sessaoExpirou, setSessaoExpirou] = useState(false);
-  const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.41";
+  const APP_VERSION = process.env.REACT_APP_VERSION || "1.13.45";
 
   useEffect(() => {
     const handler = () => { setSessaoExpirou(true); setSession(null); };

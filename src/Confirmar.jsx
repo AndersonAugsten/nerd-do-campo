@@ -89,6 +89,21 @@ export default function Confirmar() {
 
   const expirado = dados?.expirado;
   const jogadores = dados?.jogadores || [];
+  const info = dados?.info || {};
+  const TIPO_LABEL = { encontro: "⚽ Encontro", partida: "🏆 Partida", evento: "📅 Evento" };
+  const tipoLabel = TIPO_LABEL[dados?.tipo] || "Confirmação";
+  function fmtQuando(q) {
+    if (!q) return null;
+    try {
+      const d = new Date(q);
+      const data = d.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
+      // se tiver hora significativa (não meia-noite), mostra
+      const temHora = d.getHours() !== 0 || d.getMinutes() !== 0;
+      const hora = temHora ? d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : null;
+      return hora ? `${data} às ${hora}` : data;
+    } catch { return null; }
+  }
+  const quandoFmt = fmtQuando(info.quando);
 
   return (
     <div style={wrap}>
@@ -97,6 +112,18 @@ export default function Confirmar() {
           <img src="/logo.png" alt="" style={{ width:54, height:54, borderRadius:"50%", objectFit:"cover" }} onError={e => { e.target.style.display="none"; }} />
           <h1 style={{ fontSize:20, margin:"10px 0 4px" }}>Confirmar presença</h1>
           <div style={{ fontSize:13, color:C.dim }}>Toque no seu nome e diga se vai.</div>
+        </div>
+
+        {/* Informações do que se está confirmando */}
+        <div style={{ background:C.surf2, border:`1px solid ${C.border}`, borderRadius:10, padding:"14px 16px", marginBottom:18 }}>
+          <div style={{ display:"inline-block", fontSize:11, fontWeight:800, color:"#0B3D2E", background:C.gold, borderRadius:6, padding:"2px 10px", textTransform:"uppercase", letterSpacing:"0.04em", marginBottom:8 }}>{tipoLabel}</div>
+          {info.titulo && <div style={{ fontSize:17, fontWeight:800, color:C.cream, marginBottom:2 }}>{info.titulo}</div>}
+          {info.nome_time && <div style={{ fontSize:13, color:C.dim, marginBottom:8 }}>{info.nome_time}</div>}
+          <div style={{ display:"flex", flexDirection:"column", gap:4, fontSize:13.5 }}>
+            {quandoFmt && <div style={{ color:C.cream, textTransform:"capitalize" }}>🗓️ {quandoFmt}</div>}
+            {info.local && <div style={{ color:C.cream }}>📍 {info.local}</div>}
+            {info.descricao && <div style={{ color:C.dim, fontStyle:"italic", marginTop:2 }}>{info.descricao}</div>}
+          </div>
         </div>
 
         {expirado && <div style={{ background:C.gold+"22", border:`1px solid ${C.gold}`, color:C.gold, borderRadius:8, padding:"10px 12px", fontSize:13, marginBottom:14, textAlign:"center" }}>Este link já expirou — não é mais possível responder.</div>}
