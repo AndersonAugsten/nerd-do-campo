@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-const APP_VERSION = process.env.REACT_APP_VERSION || "1.0.0";
+const APP_VERSION = process.env.REACT_APP_VERSION || "1.2.5";
 const UFS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 
 // Paleta de cores do sistema — declarada no topo para evitar "Cannot access 'C' before initialization"
@@ -2328,6 +2328,7 @@ const MENU_BASE = [
   { id:"caixa",       label:"Caixa",        icon:"💵", grupo:"Financeiro" },
   { id:"eventos",     label:"Eventos",      icon:"🎉", grupo:"Financeiro" },
   { id:"app",         label:"Visão App",   icon:"👁️", grupo:"Acompanhar" },
+  { id:"dicas",       label:"Dicas",       icon:"💡", grupo:"Acompanhar" },
   { id:"ajuda",       label:"Ajuda",        icon:"❓", grupo:"Acompanhar" },
 ];
 
@@ -3054,6 +3055,47 @@ function CrudMensalidades({ idTime, show, readOnly }) {
 // ══════════════════════════════════════════════════════════════
 // PÁGINA DE AJUDA
 // ══════════════════════════════════════════════════════════════
+function PaginaDicas({ ehTurmaFechada }) {
+  const DICAS = [
+    { ic:"📅", t:"Use só o que precisar", d:"Você não é obrigado a usar tudo. Dá pra controlar só o calendário, só a presença, ou ir até o controle financeiro completo. Comece simples e ative o resto quando quiser." },
+    { ic:"✅", t:"Confirmação de presença sem login", d:"Gere um link e mande no grupo. Cada jogador abre, toca no próprio nome e responde se vai — sem instalar nada e sem senha. Você vê quem confirmou em tempo real." },
+    { ic:"⚽", t:"Escalação inteligente", d:"Na hora de escalar, o sistema não deixa repetir o número da camisa e respeita o limite de titulares da modalidade. Menos chance de errar a escalação." },
+    { ic:"🎯", t:"Gols com assistência e minuto", d:"Ao registrar um gol, informe quem deu o passe e o minuto. A artilharia e o ranking de assistências se montam sozinhos, sem você fazer conta." },
+    { ic:"💰", t:"Mensalidade sem fofoca", d:"Marque quem pagou mês a mês. Quem está em dia, quem deve e quem é isento aparece numa lista só. Dá até pra marcar todos como pagos de uma vez." },
+    { ic:"💵", t:"Controle de caixa completo", d:"Quer ir além da mensalidade? Registre receitas e despesas e tenha o saldo do time sempre atualizado. Use só se fizer sentido pro seu grupo." },
+    { ic:"🎉", t:"Eventos com presença", d:"Cadastre um churrasco ou confraternização e registre quem foi — sem precisar lançar nada financeiro. Serve só pra controlar presença, se quiser." },
+    { ic:"📊", t:"Seu time numa vitrine pública", d:"As estatísticas do time ficam numa página que qualquer um acessa pelo celular, sem instalar app. Bom pra mostrar a artilharia e o histórico pra galera." },
+    { ic:"👥", t:"Um login, vários times", d:"Se você administra mais de um time com o mesmo e-mail, dá pra alternar entre eles no seletor lá em cima — sem precisar sair e entrar de novo." },
+    { ic:"🎂", t:"Idade do jogador automática", d:"Cadastre a data de nascimento e o sistema calcula a idade sozinho na lista de jogadores. Dá até pra ordenar do mais novo ao mais velho." },
+  ];
+  const DICAS_TURMA = [
+    { ic:"🎽", t:"Turma fechada: times internos", d:"No modo turma fechada, você monta times que se enfrentam entre si (Laranja x Preto) e registra cada rodada do racha." },
+    { ic:"🧺", t:"Ranking da lavagem do colete", d:"Marque quem levou o fardamento pra lavar em cada encontro. O sistema mantém um ranking — ninguém mais 'esquece' que é a vez dele." },
+  ];
+  const lista = ehTurmaFechada ? [...DICAS, ...DICAS_TURMA] : DICAS;
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:16, maxWidth:720 }}>
+      <div style={{ marginBottom:4 }}>
+        <div style={{ fontSize:22, fontWeight:800, color:C.cream, textTransform:"uppercase", letterSpacing:"0.06em" }}>
+          💡 Você sabia?
+        </div>
+        <div style={{ fontSize:13, color:C.dim, marginTop:6, lineHeight:1.6 }}>
+          Recursos do sistema explicados em poucas palavras. Role e descubra o que dá pra fazer.
+        </div>
+      </div>
+      {lista.map((dica, i) => (
+        <Card key={i} style={{ padding:20, display:"flex", gap:16, alignItems:"flex-start" }}>
+          <div style={{ fontSize:30, lineHeight:1, flexShrink:0 }}>{dica.ic}</div>
+          <div>
+            <div style={{ fontSize:15, fontWeight:800, color:C.gold, marginBottom:5 }}>{dica.t}</div>
+            <div style={{ fontSize:13, color:C.cream, lineHeight:1.6 }}>{dica.d}</div>
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
 function PaginaAjuda() {
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:24, maxWidth:640 }}>
@@ -3066,7 +3108,7 @@ function PaginaAjuda() {
           O manual contém o guia completo do sistema — desde o cadastro inicial
           até o controle de mensalidades. Atualizado para a versão atual.
         </div>
-        <a href="/manual.pdf?v=1.0.0" target="_blank" rel="noopener noreferrer"
+        <a href="/manual.pdf?v=1.1.0" target="_blank" rel="noopener noreferrer"
           style={{ display:"inline-flex", alignItems:"center", gap:10,
             background:C.gold, color:"#0B3D2E", borderRadius:10,
             padding:"14px 28px", fontFamily:"inherit", fontWeight:800,
@@ -3764,6 +3806,7 @@ export default function AdminAppCompleto() {
   const [session, setSession]       = useState(SESSION_TOKEN ? {access_token: SESSION_TOKEN} : null);
   const [sessaoExpirou, setSessaoExpirou] = useState(false);
   const [idTime, setIdTime]         = useState(null);
+  const [meusTimes, setMeusTimes]   = useState([]); // vínculos do admin (pode ter vários times)
   const [timeInativo, setTimeInativo] = useState(false);
   const [isSuperadmin, setIsSuperadmin] = useState(false);
   const [menu, setMenu] = useState("inicio");
@@ -3780,7 +3823,7 @@ export default function AdminAppCompleto() {
 
   // Verificar manutenção do sistema
   const { data: todosTimesSuper } = useQuery(() =>
-    isSuperadmin ? api.get(`time?select=id_time,nome&order=nome.asc`) : Promise.resolve([]),
+    isSuperadmin ? api.get(`time?select=id_time,nome,observacao_super&order=nome.asc`) : Promise.resolve([]),
     [isSuperadmin]
   );
   const { data: manutCfg, loading: loadManut } = useQuery(() =>
@@ -3795,18 +3838,27 @@ export default function AdminAppCompleto() {
     api.get(`usuario_time?user_id=eq.${uid}&select=*,time(*)`)
       .then(data => {
         if (data?.length) {
-          const ut = data[0];
-          if (ut.role === 'superadmin') {
+          // Superadmin: vê tudo (tem vínculo com role superadmin)
+          const sa = data.find(ut => ut.role === 'superadmin');
+          if (sa) {
             setIsSuperadmin(true);
             setIdTime(null); // superadmin vê tudo
-          } else {
-            // Bloquear acesso se o time estiver inativo
-            if (ut.time?.status === 'Inativo') {
-              setTimeInativo(true);
-              return;
-            }
-            setIdTime(ut.id_time);
+            return;
           }
+          // Admin comum: pode ter vínculo com VÁRIOS times.
+          // Considera só os times ativos.
+          const ativos = data.filter(ut => ut.time?.status !== 'Inativo');
+          if (ativos.length === 0) {
+            // todos os times do usuário estão inativos
+            setTimeInativo(true);
+            return;
+          }
+          setMeusTimes(ativos);
+          if (ativos.length === 1) {
+            // só um time: entra direto nele
+            setIdTime(ativos[0].id_time);
+          }
+          // se tiver mais de um, idTime fica null e o seletor aparece (abaixo)
         }
       }).catch(() => {});
   }, [session]);
@@ -4013,7 +4065,21 @@ export default function AdminAppCompleto() {
               <select value={idTime||""} onChange={e => { const v=e.target.value; setIdTime(v?Number(v):null); setTemporadaSel(null); setMenu("inicio"); setPartida(null); setNovaPartida(false); }}
                 style={{ background:C.surf2, color: idTime?C.cream:C.gold, border:`1px solid ${idTime?C.border:C.gold}`, borderRadius:8, padding:"6px 10px", fontFamily:"inherit", fontSize:12, fontWeight:700 }}>
                 <option value="">— Selecione um time —</option>
-                {(todosTimesSuper||[]).map(t=><option key={t.id_time} value={t.id_time}>{t.nome}</option>)}
+                {(todosTimesSuper||[]).map(t=>{
+                  const obs = (t.observacao_super||"").trim();
+                  const obsCurta = obs.length > 45 ? obs.slice(0,45)+"…" : obs;
+                  return <option key={t.id_time} value={t.id_time}>{t.nome}{obsCurta ? ` — ${obsCurta}` : ""}</option>;
+                })}
+              </select>
+            </div>
+          )}
+          {!isSuperadmin && meusTimes.length > 1 && (
+            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+              <span style={{ fontSize:11, color:C.gold, fontWeight:700, textTransform:"uppercase" }}>Meus times</span>
+              <select value={idTime||""} onChange={e => { const v=e.target.value; setIdTime(v?Number(v):null); setTemporadaSel(null); setMenu("inicio"); setPartida(null); setNovaPartida(false); }}
+                style={{ background:C.surf2, color: idTime?C.cream:C.gold, border:`1px solid ${idTime?C.border:C.gold}`, borderRadius:8, padding:"6px 10px", fontFamily:"inherit", fontSize:12, fontWeight:700 }}>
+                <option value="">— Selecione um time —</option>
+                {meusTimes.map(ut=><option key={ut.id_time} value={ut.id_time}>{ut.time?.nome || `Time ${ut.id_time}`}</option>)}
               </select>
             </div>
           )}
@@ -4022,6 +4088,12 @@ export default function AdminAppCompleto() {
             : null
           }
           <span className="header-time-nome" style={{ fontSize:12, color:C.dim }}>{time?.nome || ""}</span>
+          {isSuperadmin && time?.observacao_super && (
+            <span title={time.observacao_super}
+              style={{ fontSize:11, color:C.gold, background:C.gold+"22", border:`1px solid ${C.gold}66`, borderRadius:6, padding:"2px 8px", maxWidth:260, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", cursor:"help" }}>
+              📝 {time.observacao_super}
+            </span>
+          )}
           {(temporadas||[]).length > 1 && (
             <select value={temporadaSel?.id_temporada||""} onChange={e => setTemporadaSel(temporadas.find(t=>t.id_temporada===Number(e.target.value)))}
               style={{ background:C.surf2, color:C.cream, border:`1px solid ${C.border}`, borderRadius:8, padding:"6px 10px", fontFamily:"inherit", fontSize:12 }}>
@@ -4083,9 +4155,18 @@ export default function AdminAppCompleto() {
                 para visualizar e gerenciar os dados dele. Para a gestão geral do sistema, use o painel <b>/super</b>.
               </div>
             </div>
+          ) : !isSuperadmin && meusTimes.length > 1 && !idTime ? (
+            <div style={{ textAlign:"center", padding:"60px 20px", color:C.dim }}>
+              <div style={{ fontSize:48, marginBottom:16 }}>⚽</div>
+              <div style={{ fontSize:18, fontWeight:800, color:C.cream, marginBottom:8 }}>Você gerencia {meusTimes.length} times</div>
+              <div style={{ fontSize:14, maxWidth:420, margin:"0 auto", lineHeight:1.6 }}>
+                Selecione um time no menu <b style={{ color:C.gold }}>Meus times</b> no topo da tela
+                para começar a gerenciá-lo.
+              </div>
+            </div>
           ) : (<>
           {/* Badge somente leitura */}
-          {menu !== "inicio" && menu !== "app" && !canEdit(menu) && (
+          {menu !== "inicio" && menu !== "app" && menu !== "dicas" && menu !== "ajuda" && !canEdit(menu) && (
             <div style={{ background:C.gold+"22", border:`1px solid ${C.gold}44`, borderRadius:8,
               padding:"8px 16px", marginBottom:16, display:"flex", alignItems:"center", gap:8, fontSize:12 }}>
               <span style={{ fontSize:16 }}>👁️</span>
@@ -4151,6 +4232,7 @@ export default function AdminAppCompleto() {
           {menu === "caixa"         && (<CrudCaixa idTime={idTime} show={show} readOnly={!canEdit("caixa")}/>)}
           {menu === "eventos"       && (<CrudEventos idTime={idTime} show={show} readOnly={!canEdit("eventos")}/>)}
           {menu === "tiposmov"      && (<CrudTiposMov idTime={idTime} show={show} readOnly={!canEdit("tiposmov")}/>)}
+          {menu === "dicas"         && (<PaginaDicas ehTurmaFechada={ehTurmaFechada}/>)}
           {menu === "ajuda"         && (<PaginaAjuda/>)}
           {menu === "time"        && (<>{secTitle("Configurações do Time")}<ConfigTime idTime={idTime} show={show} readOnly={!canEdit("time")} /></>)}
           </>)}

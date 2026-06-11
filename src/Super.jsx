@@ -241,6 +241,7 @@ function DashboardSuper() {
   const [modalPerms, setModalPerms]           = useState(null); // { user_id, id_time, nome }
   const [modalNivel, setModalNivel]           = useState(null); // time selecionado para editar nível
   const [aba, setAba] = useState("times");
+  const [filtroTime, setFiltroTime] = useState("");
 
   const totalTimes    = (times||[]).length;
   const totalUsuarios = (usuarios||[]).length;
@@ -308,33 +309,51 @@ function DashboardSuper() {
           <div style={{ fontSize:16, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:C.cream }}>Times Cadastrados</div>
           <Btn onClick={()=>setModalNovoTime(true)}>+ Novo Time</Btn>
         </div>
+        <div style={{ padding:"14px 24px", borderBottom:`1px solid ${C.border}` }}>
+          <input
+            value={filtroTime}
+            onChange={e => setFiltroTime(e.target.value)}
+            placeholder="🔍 Filtrar por nome do time"
+            style={{ width:"100%", maxWidth:420, background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8, color:C.cream, fontFamily:"inherit", fontSize:14, padding:"10px 14px", outline:"none" }}
+          />
+          {filtroTime && (
+            <span style={{ marginLeft:12, fontSize:12, color:C.dim }}>
+              {(times||[]).filter(t => (t.nome||"").toLowerCase().includes(filtroTime.toLowerCase())).length} resultado(s)
+            </span>
+          )}
+        </div>
         <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}><table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
           <thead><tr style={{ background:C.surf2 }}>
-            {["Time","Status","Nível","Temporadas","Admins","Fundação","Ações"].map(h => <th key={h} style={{ padding:"10px 16px", textAlign:"left", fontSize:11, color:C.dim, textTransform:"uppercase", letterSpacing:"0.06em", fontWeight:700 }}>{h}</th>)}
+            {["Time","Status","Nível","Temporadas","Admins","Fundação","Observação","Ações"].map(h => <th key={h} style={{ padding:"10px 16px", textAlign:"left", fontSize:11, color:C.dim, textTransform:"uppercase", letterSpacing:"0.06em", fontWeight:700 }}>{h}</th>)}
           </tr></thead>
           <tbody>
-            {(times||[]).map((t,i) => (
+            {(times||[]).filter(t => !filtroTime || (t.nome||"").toLowerCase().includes(filtroTime.toLowerCase())).map((t,i) => (
               <tr key={t.id_time} style={{ background:i%2===0?C.surface:C.bg }}>
-                <td style={{ padding:"13px 16px", fontWeight:700, color:C.cream }}>{t.nome}</td>
+                <td style={{ padding:"13px 16px", fontWeight:700, color:C.cream }}>
+                  {t.nome}
+                </td>
                 <td style={{ padding:"13px 16px" }}>
                   <span style={{ color: t.status==="Inativo" ? C.loss : C.win, fontWeight:700, fontSize:12 }}>
                     {t.status==="Inativo" ? "🔴 Inativo" : "🟢 Ativo"}
                   </span>
                 </td>
-                <td style={{ padding:"13px 16px" }}>
-                  <span style={{ background:C.gold+"22", color:C.gold, border:`1px solid ${C.gold}44`, borderRadius:6, padding:"2px 10px", fontSize:12, fontWeight:700 }}>
+                <td style={{ padding:"13px 16px", whiteSpace:"nowrap" }}>
+                  <span style={{ background:C.gold+"22", color:C.gold, border:`1px solid ${C.gold}44`, borderRadius:6, padding:"2px 10px", fontSize:12, fontWeight:700, whiteSpace:"nowrap" }}>
                     Nível {t.nivel_mensalidade||1}
                   </span>
                 </td>
                 <td style={{ padding:"13px 16px", color:C.dim }}>{t.temporada?.length||0}</td>
                 <td style={{ padding:"13px 16px", color:C.dim }}>{(t.usuario_time||[]).filter(u=>u.role==="admin").length}</td>
                 <td style={{ padding:"13px 16px", color:C.dim, fontSize:13 }}>{t.data_fundacao?new Date(t.data_fundacao).getFullYear():"—"}</td>
+                <td style={{ padding:"13px 16px", color:C.cream, fontSize:13, maxWidth:240 }}>
+                  <CelulaObservacao time={t} show={show} reload={reload} />
+                </td>
                 <td style={{ padding:"13px 16px", display:"flex", gap:6, flexWrap:"wrap" }}>
                   <Btn variant="secondary" style={{ fontSize:11, padding:"5px 12px" }} onClick={()=>{ setTimeSelecionado(t); setModalNovoUser(true); }}>
                     + Admin
                   </Btn>
                   <Btn variant="secondary" style={{ fontSize:11, padding:"5px 12px" }} onClick={()=> setModalNivel(t)}>
-                    Nível
+                    ⚙️ Gerenciar
                   </Btn>
                   <Btn variant="secondary" style={{ fontSize:11, padding:"5px 12px", color: t.status==="Inativo" ? C.win : C.loss }}
                     onClick={async ()=>{
@@ -1167,6 +1186,18 @@ function ConfigSistema({ show }) {
     finally { setSaving(null); }
   }
 
+  async function salvarDescNivel(n) {
+    const chave = `mensalidade_nivel_${n}_desc`;
+    setSaving(chave);
+    try {
+      await api.patch(`config_sistema?chave=eq.${chave}`, {
+        valor: String(niveis[chave] ?? ""), atualizado_em: new Date().toISOString(),
+      });
+      show("Descrição salva!"); reload();
+    } catch(e) { show("Erro: " + e.message, "error"); }
+    finally { setSaving(null); }
+  }
+
   const ehBooleano = (v) => {
     const s = String(v ?? "").trim().toLowerCase();
     return s === "true" || s === "false" || s === "1" || s === "0";
@@ -1176,8 +1207,9 @@ function ConfigSistema({ show }) {
     return s === "true" || s === "1";
   };
   const toggles = (configs||[]).filter(c => !c.chave.startsWith("mensalidade_nivel_") && ehBooleano(c.valor));
-  const niveisList = (configs||[]).filter(c => c.chave.startsWith("mensalidade_nivel_"))
+  const niveisList = (configs||[]).filter(c => c.chave.startsWith("mensalidade_nivel_") && !c.chave.endsWith("_desc"))
     .sort((a,b) => parseInt(a.chave.split("_")[2]) - parseInt(b.chave.split("_")[2]));
+  const descNivel = (n) => (configs||[]).find(c => c.chave === `mensalidade_nivel_${n}_desc`)?.valor || "";
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
@@ -1225,23 +1257,37 @@ function ConfigSistema({ show }) {
         </div>
         {niveisList.map(cfg => {
           const nivel = cfg.chave.split("_")[2];
+          const chaveDesc = `mensalidade_nivel_${nivel}_desc`;
           return (
-            <div key={cfg.chave} style={{ display:"flex", alignItems:"center", gap:12,
-              padding:"10px 0", borderBottom:`1px solid ${C.border}` }}>
-              <div style={{ width:90, fontSize:13, fontWeight:700, color:C.cream }}>Nível {nivel}</div>
-              <div style={{ display:"flex", alignItems:"center", gap:6, flex:1 }}>
-                <span style={{ fontSize:13, color:C.dim }}>R$</span>
-                <input type="number" min="0" step="0.01"
-                  value={niveis[cfg.chave] ?? ""}
-                  onChange={e => setNiveis(prev => ({ ...prev, [cfg.chave]: e.target.value }))}
-                  style={{ width:120, background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8,
-                    color:C.cream, fontFamily:"inherit", fontSize:14, padding:"8px 12px", outline:"none" }}/>
+            <div key={cfg.chave} style={{ padding:"12px 0", borderBottom:`1px solid ${C.border}` }}>
+              <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                <div style={{ width:90, fontSize:13, fontWeight:700, color:C.cream }}>Nível {nivel}</div>
+                <div style={{ display:"flex", alignItems:"center", gap:6, flex:1 }}>
+                  <span style={{ fontSize:13, color:C.dim }}>R$</span>
+                  <input type="number" min="0" step="0.01"
+                    value={niveis[cfg.chave] ?? ""}
+                    onChange={e => setNiveis(prev => ({ ...prev, [cfg.chave]: e.target.value }))}
+                    style={{ width:120, background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8,
+                      color:C.cream, fontFamily:"inherit", fontSize:14, padding:"8px 12px", outline:"none" }}/>
+                </div>
+                <Btn variant="secondary" style={{ fontSize:11, padding:"6px 14px" }}
+                  disabled={saving === cfg.chave}
+                  onClick={() => salvarNivel(cfg.chave)}>
+                  {saving === cfg.chave ? "..." : "Salvar"}
+                </Btn>
               </div>
-              <Btn variant="secondary" style={{ fontSize:11, padding:"6px 14px" }}
-                disabled={saving === cfg.chave}
-                onClick={() => salvarNivel(cfg.chave)}>
-                {saving === cfg.chave ? "..." : "Salvar"}
-              </Btn>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:8, paddingLeft:102 }}>
+                <input type="text" placeholder="Quando aplicar este nível? (ex: times até 20 jogadores)"
+                  value={niveis[chaveDesc] ?? ""}
+                  onChange={e => setNiveis(prev => ({ ...prev, [chaveDesc]: e.target.value }))}
+                  style={{ flex:1, background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8,
+                    color:C.dim, fontFamily:"inherit", fontSize:12, padding:"6px 10px", outline:"none" }}/>
+                <Btn variant="secondary" style={{ fontSize:11, padding:"5px 12px" }}
+                  disabled={saving === chaveDesc}
+                  onClick={() => salvarDescNivel(nivel)}>
+                  {saving === chaveDesc ? "..." : "Salvar desc."}
+                </Btn>
+              </div>
             </div>
           );
         })}
@@ -1276,11 +1322,57 @@ function ConfigSistema({ show }) {
     </div>
   );
 }
+function CelulaObservacao({ time, show, reload }) {
+  const [editando, setEditando] = useState(false);
+  const [valor, setValor] = useState(time.observacao_super || "");
+  const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => { setValor(time.observacao_super || ""); }, [time.observacao_super]);
+
+  async function salvar() {
+    setEditando(false);
+    const novo = valor.trim();
+    if (novo === (time.observacao_super || "")) return; // nada mudou
+    setSalvando(true);
+    try {
+      await api.patch(`time?id_time=eq.${time.id_time}`, { observacao_super: novo || null });
+      show && show("Observação salva!");
+      reload && reload();
+    } catch (e) {
+      show && show("Erro ao salvar: " + e.message, "error");
+    } finally { setSalvando(false); }
+  }
+
+  if (editando) {
+    return (
+      <textarea
+        autoFocus
+        value={valor}
+        disabled={salvando}
+        onChange={e => setValor(e.target.value)}
+        onBlur={salvar}
+        onKeyDown={e => { if (e.key === "Escape") { setValor(time.observacao_super||""); setEditando(false); } }}
+        rows={2}
+        placeholder="Anotação interna..."
+        style={{ width:"100%", minWidth:200, background:C.surf2, border:`1px solid ${C.gold}`, borderRadius:6, color:C.cream, fontFamily:"inherit", fontSize:12, padding:"6px 8px", outline:"none", resize:"vertical" }}
+      />
+    );
+  }
+  return (
+    <div onClick={() => setEditando(true)} title="Clique para editar"
+      style={{ cursor:"text", minHeight:22, maxWidth:240, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+        color: time.observacao_super ? C.cream : C.dim, fontSize:13, padding:"2px 4px", borderRadius:4 }}>
+      {salvando ? "salvando..." : (time.observacao_super ? `📝 ${time.observacao_super}` : "✏️ adicionar")}
+    </div>
+  );
+}
+
 function ModalNivelMensalidade({ time, onClose, onSalvo, show }) {
   const { data: niveis } = useQuery(() =>
     api.get(`config_sistema?chave=like.mensalidade_nivel_*&select=*`)
   );
   const [nivel, setNivel] = useState(String(time.nivel_mensalidade || 1));
+  const [obsSuper, setObsSuper] = useState(time.observacao_super || "");
   const [saving, setSaving] = useState(false);
 
   function valorDoNivel(n) {
@@ -1291,14 +1383,14 @@ function ModalNivelMensalidade({ time, onClose, onSalvo, show }) {
   async function salvar() {
     setSaving(true);
     try {
-      await api.patch(`time?id_time=eq.${time.id_time}`, { nivel_mensalidade: Number(nivel) });
+      await api.patch(`time?id_time=eq.${time.id_time}`, { nivel_mensalidade: Number(nivel), observacao_super: obsSuper || null });
       onSalvo();
     } catch(e) { show("Erro: " + e.message, "error"); }
     finally { setSaving(false); }
   }
 
   return (
-    <Modal title={`Nível de Mensalidade — ${time.nome}`} onClose={onClose}>
+    <Modal title={`Gerenciar time — ${time.nome}`} onClose={onClose}>
       <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
         <div style={{ fontSize:13, color:C.dim }}>
           Selecione o nível de mensalidade que este time paga ao sistema.
@@ -1320,9 +1412,16 @@ function ModalNivelMensalidade({ time, onClose, onSalvo, show }) {
             );
           })}
         </div>
+        <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+          <label style={{ fontSize:12, color:C.gold, fontWeight:700 }}>📝 Observação interna (só super admin)</label>
+          <div style={{ fontSize:11, color:C.dim }}>Anotações sobre este time. Nunca visível para os admins do time.</div>
+          <textarea value={obsSuper} onChange={e => setObsSuper(e.target.value)} rows={3}
+            placeholder="Ex: contato pelo WhatsApp, combinou desconto nos 3 primeiros meses..."
+            style={{ background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8, color:C.cream, fontFamily:"inherit", fontSize:13, padding:"9px 12px", outline:"none", resize:"vertical" }}/>
+        </div>
         <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
           <Btn variant="secondary" onClick={onClose}>Cancelar</Btn>
-          <Btn onClick={salvar} disabled={saving}>{saving ? "Salvando..." : "Salvar Nível"}</Btn>
+          <Btn onClick={salvar} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Btn>
         </div>
       </div>
     </Modal>
@@ -1357,7 +1456,7 @@ function CrudMensalidadeTimes({ show }) {
   const [abaRel, setAbaRel] = useState("mensal");
 
   const { data: times } = useQuery(() =>
-    api.get(`time?select=id_time,nome,nivel_mensalidade,status&order=nome.asc`)
+    api.get(`time?select=id_time,nome,nivel_mensalidade,status,observacao_super&order=nome.asc`)
   );
   const { data: niveis } = useQuery(() =>
     api.get(`config_sistema?chave=like.mensalidade_nivel_*&select=*`)
@@ -1777,7 +1876,7 @@ function AjudaSuper() {
           Guia completo de gestão do sistema: times, mensalidades, solicitações,
           tipos, configurações, permissões e os fluxos do dia a dia.
         </div>
-        <a href="/manual-super.pdf?v=1.0.0" target="_blank" rel="noopener noreferrer"
+        <a href="/manual-super.pdf?v=1.1.0" target="_blank" rel="noopener noreferrer"
           style={{ display:"inline-flex", alignItems:"center", gap:10,
             background:C.gold, color:"#0B3D2E", borderRadius:10,
             padding:"14px 28px", fontFamily:"inherit", fontWeight:800,
@@ -2143,7 +2242,7 @@ function CrudTipoTime({ show }) {
 export default function SuperApp() {
   const [session, setSession] = useState(SESSION_TOKEN ? {access_token: SESSION_TOKEN} : null);
   const [sessaoExpirou, setSessaoExpirou] = useState(false);
-  const APP_VERSION = process.env.REACT_APP_VERSION || "1.0.0";
+  const APP_VERSION = process.env.REACT_APP_VERSION || "1.2.5";
 
   useEffect(() => {
     const handler = () => { setSessaoExpirou(true); setSession(null); };
@@ -2168,7 +2267,7 @@ export default function SuperApp() {
           <Btn variant="danger" style={{ fontSize:11, padding:"6px 12px" }} onClick={()=>{ SESSION_TOKEN=null; REFRESH_TOKEN=null; sessionStorage.removeItem("ndc_super_token"); sessionStorage.removeItem("ndc_super_refresh"); setSession(null); }}>Sair</Btn>
         </div>
       </header>
-      <main style={{ maxWidth:1100, margin:"0 auto", padding:"28px 24px" }}>
+      <main style={{ maxWidth:1400, margin:"0 auto", padding:"28px 24px" }}>
         <DashboardSuper/>
       </main>
     </div>
