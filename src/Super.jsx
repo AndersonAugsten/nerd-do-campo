@@ -241,6 +241,7 @@ function DashboardSuper() {
   const [modalPerms, setModalPerms]           = useState(null); // { user_id, id_time, nome }
   const [modalNivel, setModalNivel]           = useState(null); // time selecionado para editar nível
   const [aba, setAba] = useState("times");
+  const [filtroTime, setFiltroTime] = useState("");
 
   const totalTimes    = (times||[]).length;
   const totalUsuarios = (usuarios||[]).length;
@@ -308,14 +309,29 @@ function DashboardSuper() {
           <div style={{ fontSize:16, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:C.cream }}>Times Cadastrados</div>
           <Btn onClick={()=>setModalNovoTime(true)}>+ Novo Time</Btn>
         </div>
+        <div style={{ padding:"14px 24px", borderBottom:`1px solid ${C.border}` }}>
+          <input
+            value={filtroTime}
+            onChange={e => setFiltroTime(e.target.value)}
+            placeholder="🔍 Filtrar por nome do time"
+            style={{ width:"100%", maxWidth:420, background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8, color:C.cream, fontFamily:"inherit", fontSize:14, padding:"10px 14px", outline:"none" }}
+          />
+          {filtroTime && (
+            <span style={{ marginLeft:12, fontSize:12, color:C.dim }}>
+              {(times||[]).filter(t => (t.nome||"").toLowerCase().includes(filtroTime.toLowerCase())).length} resultado(s)
+            </span>
+          )}
+        </div>
         <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}><table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
           <thead><tr style={{ background:C.surf2 }}>
-            {["Time","Status","Nível","Temporadas","Admins","Fundação","Ações"].map(h => <th key={h} style={{ padding:"10px 16px", textAlign:"left", fontSize:11, color:C.dim, textTransform:"uppercase", letterSpacing:"0.06em", fontWeight:700 }}>{h}</th>)}
+            {["Time","Status","Nível","Temporadas","Admins","Fundação","Observação","Ações"].map(h => <th key={h} style={{ padding:"10px 16px", textAlign:"left", fontSize:11, color:C.dim, textTransform:"uppercase", letterSpacing:"0.06em", fontWeight:700 }}>{h}</th>)}
           </tr></thead>
           <tbody>
-            {(times||[]).map((t,i) => (
+            {(times||[]).filter(t => !filtroTime || (t.nome||"").toLowerCase().includes(filtroTime.toLowerCase())).map((t,i) => (
               <tr key={t.id_time} style={{ background:i%2===0?C.surface:C.bg }}>
-                <td style={{ padding:"13px 16px", fontWeight:700, color:C.cream }}>{t.nome}</td>
+                <td style={{ padding:"13px 16px", fontWeight:700, color:C.cream }}>
+                  {t.nome}
+                </td>
                 <td style={{ padding:"13px 16px" }}>
                   <span style={{ color: t.status==="Inativo" ? C.loss : C.win, fontWeight:700, fontSize:12 }}>
                     {t.status==="Inativo" ? "🔴 Inativo" : "🟢 Ativo"}
@@ -329,12 +345,17 @@ function DashboardSuper() {
                 <td style={{ padding:"13px 16px", color:C.dim }}>{t.temporada?.length||0}</td>
                 <td style={{ padding:"13px 16px", color:C.dim }}>{(t.usuario_time||[]).filter(u=>u.role==="admin").length}</td>
                 <td style={{ padding:"13px 16px", color:C.dim, fontSize:13 }}>{t.data_fundacao?new Date(t.data_fundacao).getFullYear():"—"}</td>
+                <td style={{ padding:"13px 16px", color:C.cream, fontSize:13, maxWidth:240 }}>
+                  {t.observacao_super
+                    ? <span title={t.observacao_super} style={{ display:"inline-block", maxWidth:240, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", verticalAlign:"bottom", cursor:"help" }}>📝 {t.observacao_super}</span>
+                    : <span style={{ color:C.dim }}>—</span>}
+                </td>
                 <td style={{ padding:"13px 16px", display:"flex", gap:6, flexWrap:"wrap" }}>
                   <Btn variant="secondary" style={{ fontSize:11, padding:"5px 12px" }} onClick={()=>{ setTimeSelecionado(t); setModalNovoUser(true); }}>
                     + Admin
                   </Btn>
                   <Btn variant="secondary" style={{ fontSize:11, padding:"5px 12px" }} onClick={()=> setModalNivel(t)}>
-                    Nível
+                    ⚙️ Gerenciar
                   </Btn>
                   <Btn variant="secondary" style={{ fontSize:11, padding:"5px 12px", color: t.status==="Inativo" ? C.win : C.loss }}
                     onClick={async ()=>{
@@ -1326,7 +1347,7 @@ function ModalNivelMensalidade({ time, onClose, onSalvo, show }) {
   }
 
   return (
-    <Modal title={`Nível de Mensalidade — ${time.nome}`} onClose={onClose}>
+    <Modal title={`Gerenciar time — ${time.nome}`} onClose={onClose}>
       <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
         <div style={{ fontSize:13, color:C.dim }}>
           Selecione o nível de mensalidade que este time paga ao sistema.
@@ -1392,7 +1413,7 @@ function CrudMensalidadeTimes({ show }) {
   const [abaRel, setAbaRel] = useState("mensal");
 
   const { data: times } = useQuery(() =>
-    api.get(`time?select=id_time,nome,nivel_mensalidade,status&order=nome.asc`)
+    api.get(`time?select=id_time,nome,nivel_mensalidade,status,observacao_super&order=nome.asc`)
   );
   const { data: niveis } = useQuery(() =>
     api.get(`config_sistema?chave=like.mensalidade_nivel_*&select=*`)
@@ -2178,7 +2199,7 @@ function CrudTipoTime({ show }) {
 export default function SuperApp() {
   const [session, setSession] = useState(SESSION_TOKEN ? {access_token: SESSION_TOKEN} : null);
   const [sessaoExpirou, setSessaoExpirou] = useState(false);
-  const APP_VERSION = process.env.REACT_APP_VERSION || "1.1.0";
+  const APP_VERSION = process.env.REACT_APP_VERSION || "1.2.2";
 
   useEffect(() => {
     const handler = () => { setSessaoExpirou(true); setSession(null); };

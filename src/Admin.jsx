@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-const APP_VERSION = process.env.REACT_APP_VERSION || "1.1.0";
+const APP_VERSION = process.env.REACT_APP_VERSION || "1.2.2";
 const UFS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 
 // Paleta de cores do sistema — declarada no topo para evitar "Cannot access 'C' before initialization"
@@ -2328,6 +2328,7 @@ const MENU_BASE = [
   { id:"caixa",       label:"Caixa",        icon:"💵", grupo:"Financeiro" },
   { id:"eventos",     label:"Eventos",      icon:"🎉", grupo:"Financeiro" },
   { id:"app",         label:"Visão App",   icon:"👁️", grupo:"Acompanhar" },
+  { id:"dicas",       label:"Dicas",       icon:"💡", grupo:"Acompanhar" },
   { id:"ajuda",       label:"Ajuda",        icon:"❓", grupo:"Acompanhar" },
 ];
 
@@ -3054,6 +3055,47 @@ function CrudMensalidades({ idTime, show, readOnly }) {
 // ══════════════════════════════════════════════════════════════
 // PÁGINA DE AJUDA
 // ══════════════════════════════════════════════════════════════
+function PaginaDicas({ ehTurmaFechada }) {
+  const DICAS = [
+    { ic:"📅", t:"Use só o que precisar", d:"Você não é obrigado a usar tudo. Dá pra controlar só o calendário, só a presença, ou ir até o controle financeiro completo. Comece simples e ative o resto quando quiser." },
+    { ic:"✅", t:"Confirmação de presença sem login", d:"Gere um link e mande no grupo. Cada jogador abre, toca no próprio nome e responde se vai — sem instalar nada e sem senha. Você vê quem confirmou em tempo real." },
+    { ic:"⚽", t:"Escalação inteligente", d:"Na hora de escalar, o sistema não deixa repetir o número da camisa e respeita o limite de titulares da modalidade. Menos chance de errar a escalação." },
+    { ic:"🎯", t:"Gols com assistência e minuto", d:"Ao registrar um gol, informe quem deu o passe e o minuto. A artilharia e o ranking de assistências se montam sozinhos, sem você fazer conta." },
+    { ic:"💰", t:"Mensalidade sem fofoca", d:"Marque quem pagou mês a mês. Quem está em dia, quem deve e quem é isento aparece numa lista só. Dá até pra marcar todos como pagos de uma vez." },
+    { ic:"💵", t:"Controle de caixa completo", d:"Quer ir além da mensalidade? Registre receitas e despesas e tenha o saldo do time sempre atualizado. Use só se fizer sentido pro seu grupo." },
+    { ic:"🎉", t:"Eventos com presença", d:"Cadastre um churrasco ou confraternização e registre quem foi — sem precisar lançar nada financeiro. Serve só pra controlar presença, se quiser." },
+    { ic:"📊", t:"Seu time numa vitrine pública", d:"As estatísticas do time ficam numa página que qualquer um acessa pelo celular, sem instalar app. Bom pra mostrar a artilharia e o histórico pra galera." },
+    { ic:"👥", t:"Um login, vários times", d:"Se você administra mais de um time com o mesmo e-mail, dá pra alternar entre eles no seletor lá em cima — sem precisar sair e entrar de novo." },
+    { ic:"🎂", t:"Idade do jogador automática", d:"Cadastre a data de nascimento e o sistema calcula a idade sozinho na lista de jogadores. Dá até pra ordenar do mais novo ao mais velho." },
+  ];
+  const DICAS_TURMA = [
+    { ic:"🎽", t:"Turma fechada: times internos", d:"No modo turma fechada, você monta times que se enfrentam entre si (Laranja x Preto) e registra cada rodada do racha." },
+    { ic:"🧺", t:"Ranking da lavagem do colete", d:"Marque quem levou o fardamento pra lavar em cada encontro. O sistema mantém um ranking — ninguém mais 'esquece' que é a vez dele." },
+  ];
+  const lista = ehTurmaFechada ? [...DICAS, ...DICAS_TURMA] : DICAS;
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:16, maxWidth:720 }}>
+      <div style={{ marginBottom:4 }}>
+        <div style={{ fontSize:22, fontWeight:800, color:C.cream, textTransform:"uppercase", letterSpacing:"0.06em" }}>
+          💡 Você sabia?
+        </div>
+        <div style={{ fontSize:13, color:C.dim, marginTop:6, lineHeight:1.6 }}>
+          Recursos do sistema explicados em poucas palavras. Role e descubra o que dá pra fazer.
+        </div>
+      </div>
+      {lista.map((dica, i) => (
+        <Card key={i} style={{ padding:20, display:"flex", gap:16, alignItems:"flex-start" }}>
+          <div style={{ fontSize:30, lineHeight:1, flexShrink:0 }}>{dica.ic}</div>
+          <div>
+            <div style={{ fontSize:15, fontWeight:800, color:C.gold, marginBottom:5 }}>{dica.t}</div>
+            <div style={{ fontSize:13, color:C.cream, lineHeight:1.6 }}>{dica.d}</div>
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
 function PaginaAjuda() {
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:24, maxWidth:640 }}>
@@ -4120,7 +4162,7 @@ export default function AdminAppCompleto() {
             </div>
           ) : (<>
           {/* Badge somente leitura */}
-          {menu !== "inicio" && menu !== "app" && !canEdit(menu) && (
+          {menu !== "inicio" && menu !== "app" && menu !== "dicas" && menu !== "ajuda" && !canEdit(menu) && (
             <div style={{ background:C.gold+"22", border:`1px solid ${C.gold}44`, borderRadius:8,
               padding:"8px 16px", marginBottom:16, display:"flex", alignItems:"center", gap:8, fontSize:12 }}>
               <span style={{ fontSize:16 }}>👁️</span>
@@ -4186,6 +4228,7 @@ export default function AdminAppCompleto() {
           {menu === "caixa"         && (<CrudCaixa idTime={idTime} show={show} readOnly={!canEdit("caixa")}/>)}
           {menu === "eventos"       && (<CrudEventos idTime={idTime} show={show} readOnly={!canEdit("eventos")}/>)}
           {menu === "tiposmov"      && (<CrudTiposMov idTime={idTime} show={show} readOnly={!canEdit("tiposmov")}/>)}
+          {menu === "dicas"         && (<PaginaDicas ehTurmaFechada={ehTurmaFechada}/>)}
           {menu === "ajuda"         && (<PaginaAjuda/>)}
           {menu === "time"        && (<>{secTitle("Configurações do Time")}<ConfigTime idTime={idTime} show={show} readOnly={!canEdit("time")} /></>)}
           </>)}
