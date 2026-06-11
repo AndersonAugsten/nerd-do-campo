@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-const APP_VERSION = process.env.REACT_APP_VERSION || "1.0.0";
+const APP_VERSION = process.env.REACT_APP_VERSION || "1.1.0";
 const UFS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 
 // Paleta de cores do sistema — declarada no topo para evitar "Cannot access 'C' before initialization"
@@ -3066,7 +3066,7 @@ function PaginaAjuda() {
           O manual contém o guia completo do sistema — desde o cadastro inicial
           até o controle de mensalidades. Atualizado para a versão atual.
         </div>
-        <a href="/manual.pdf?v=1.0.0" target="_blank" rel="noopener noreferrer"
+        <a href="/manual.pdf?v=1.1.0" target="_blank" rel="noopener noreferrer"
           style={{ display:"inline-flex", alignItems:"center", gap:10,
             background:C.gold, color:"#0B3D2E", borderRadius:10,
             padding:"14px 28px", fontFamily:"inherit", fontWeight:800,
@@ -3764,6 +3764,7 @@ export default function AdminAppCompleto() {
   const [session, setSession]       = useState(SESSION_TOKEN ? {access_token: SESSION_TOKEN} : null);
   const [sessaoExpirou, setSessaoExpirou] = useState(false);
   const [idTime, setIdTime]         = useState(null);
+  const [meusTimes, setMeusTimes]   = useState([]); // vínculos do admin (pode ter vários times)
   const [timeInativo, setTimeInativo] = useState(false);
   const [isSuperadmin, setIsSuperadmin] = useState(false);
   const [menu, setMenu] = useState("inicio");
@@ -3795,18 +3796,27 @@ export default function AdminAppCompleto() {
     api.get(`usuario_time?user_id=eq.${uid}&select=*,time(*)`)
       .then(data => {
         if (data?.length) {
-          const ut = data[0];
-          if (ut.role === 'superadmin') {
+          // Superadmin: vê tudo (tem vínculo com role superadmin)
+          const sa = data.find(ut => ut.role === 'superadmin');
+          if (sa) {
             setIsSuperadmin(true);
             setIdTime(null); // superadmin vê tudo
-          } else {
-            // Bloquear acesso se o time estiver inativo
-            if (ut.time?.status === 'Inativo') {
-              setTimeInativo(true);
-              return;
-            }
-            setIdTime(ut.id_time);
+            return;
           }
+          // Admin comum: pode ter vínculo com VÁRIOS times.
+          // Considera só os times ativos.
+          const ativos = data.filter(ut => ut.time?.status !== 'Inativo');
+          if (ativos.length === 0) {
+            // todos os times do usuário estão inativos
+            setTimeInativo(true);
+            return;
+          }
+          setMeusTimes(ativos);
+          if (ativos.length === 1) {
+            // só um time: entra direto nele
+            setIdTime(ativos[0].id_time);
+          }
+          // se tiver mais de um, idTime fica null e o seletor aparece (abaixo)
         }
       }).catch(() => {});
   }, [session]);
@@ -4017,11 +4027,27 @@ export default function AdminAppCompleto() {
               </select>
             </div>
           )}
+          {!isSuperadmin && meusTimes.length > 1 && (
+            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+              <span style={{ fontSize:11, color:C.gold, fontWeight:700, textTransform:"uppercase" }}>Meus times</span>
+              <select value={idTime||""} onChange={e => { const v=e.target.value; setIdTime(v?Number(v):null); setTemporadaSel(null); setMenu("inicio"); setPartida(null); setNovaPartida(false); }}
+                style={{ background:C.surf2, color: idTime?C.cream:C.gold, border:`1px solid ${idTime?C.border:C.gold}`, borderRadius:8, padding:"6px 10px", fontFamily:"inherit", fontSize:12, fontWeight:700 }}>
+                <option value="">— Selecione um time —</option>
+                {meusTimes.map(ut=><option key={ut.id_time} value={ut.id_time}>{ut.time?.nome || `Time ${ut.id_time}`}</option>)}
+              </select>
+            </div>
+          )}
           {time?.escudo_url
             ? <img src={time.escudo_url} alt={time.nome} style={{ width:32, height:32, borderRadius:"50%", objectFit:"cover", border:`2px solid ${C.gold}` }}/>
             : null
           }
           <span className="header-time-nome" style={{ fontSize:12, color:C.dim }}>{time?.nome || ""}</span>
+          {isSuperadmin && time?.observacao_super && (
+            <span title={time.observacao_super}
+              style={{ fontSize:11, color:C.gold, background:C.gold+"22", border:`1px solid ${C.gold}66`, borderRadius:6, padding:"2px 8px", maxWidth:260, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", cursor:"help" }}>
+              📝 {time.observacao_super}
+            </span>
+          )}
           {(temporadas||[]).length > 1 && (
             <select value={temporadaSel?.id_temporada||""} onChange={e => setTemporadaSel(temporadas.find(t=>t.id_temporada===Number(e.target.value)))}
               style={{ background:C.surf2, color:C.cream, border:`1px solid ${C.border}`, borderRadius:8, padding:"6px 10px", fontFamily:"inherit", fontSize:12 }}>
@@ -4081,6 +4107,15 @@ export default function AdminAppCompleto() {
               <div style={{ fontSize:14, maxWidth:420, margin:"0 auto", lineHeight:1.6 }}>
                 Selecione um time no menu <b style={{ color:C.gold }}>👑 Super</b> no topo da tela
                 para visualizar e gerenciar os dados dele. Para a gestão geral do sistema, use o painel <b>/super</b>.
+              </div>
+            </div>
+          ) : !isSuperadmin && meusTimes.length > 1 && !idTime ? (
+            <div style={{ textAlign:"center", padding:"60px 20px", color:C.dim }}>
+              <div style={{ fontSize:48, marginBottom:16 }}>⚽</div>
+              <div style={{ fontSize:18, fontWeight:800, color:C.cream, marginBottom:8 }}>Você gerencia {meusTimes.length} times</div>
+              <div style={{ fontSize:14, maxWidth:420, margin:"0 auto", lineHeight:1.6 }}>
+                Selecione um time no menu <b style={{ color:C.gold }}>Meus times</b> no topo da tela
+                para começar a gerenciá-lo.
               </div>
             </div>
           ) : (<>

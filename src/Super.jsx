@@ -1167,6 +1167,18 @@ function ConfigSistema({ show }) {
     finally { setSaving(null); }
   }
 
+  async function salvarDescNivel(n) {
+    const chave = `mensalidade_nivel_${n}_desc`;
+    setSaving(chave);
+    try {
+      await api.patch(`config_sistema?chave=eq.${chave}`, {
+        valor: String(niveis[chave] ?? ""), atualizado_em: new Date().toISOString(),
+      });
+      show("Descrição salva!"); reload();
+    } catch(e) { show("Erro: " + e.message, "error"); }
+    finally { setSaving(null); }
+  }
+
   const ehBooleano = (v) => {
     const s = String(v ?? "").trim().toLowerCase();
     return s === "true" || s === "false" || s === "1" || s === "0";
@@ -1176,8 +1188,9 @@ function ConfigSistema({ show }) {
     return s === "true" || s === "1";
   };
   const toggles = (configs||[]).filter(c => !c.chave.startsWith("mensalidade_nivel_") && ehBooleano(c.valor));
-  const niveisList = (configs||[]).filter(c => c.chave.startsWith("mensalidade_nivel_"))
+  const niveisList = (configs||[]).filter(c => c.chave.startsWith("mensalidade_nivel_") && !c.chave.endsWith("_desc"))
     .sort((a,b) => parseInt(a.chave.split("_")[2]) - parseInt(b.chave.split("_")[2]));
+  const descNivel = (n) => (configs||[]).find(c => c.chave === `mensalidade_nivel_${n}_desc`)?.valor || "";
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
@@ -1225,23 +1238,37 @@ function ConfigSistema({ show }) {
         </div>
         {niveisList.map(cfg => {
           const nivel = cfg.chave.split("_")[2];
+          const chaveDesc = `mensalidade_nivel_${nivel}_desc`;
           return (
-            <div key={cfg.chave} style={{ display:"flex", alignItems:"center", gap:12,
-              padding:"10px 0", borderBottom:`1px solid ${C.border}` }}>
-              <div style={{ width:90, fontSize:13, fontWeight:700, color:C.cream }}>Nível {nivel}</div>
-              <div style={{ display:"flex", alignItems:"center", gap:6, flex:1 }}>
-                <span style={{ fontSize:13, color:C.dim }}>R$</span>
-                <input type="number" min="0" step="0.01"
-                  value={niveis[cfg.chave] ?? ""}
-                  onChange={e => setNiveis(prev => ({ ...prev, [cfg.chave]: e.target.value }))}
-                  style={{ width:120, background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8,
-                    color:C.cream, fontFamily:"inherit", fontSize:14, padding:"8px 12px", outline:"none" }}/>
+            <div key={cfg.chave} style={{ padding:"12px 0", borderBottom:`1px solid ${C.border}` }}>
+              <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                <div style={{ width:90, fontSize:13, fontWeight:700, color:C.cream }}>Nível {nivel}</div>
+                <div style={{ display:"flex", alignItems:"center", gap:6, flex:1 }}>
+                  <span style={{ fontSize:13, color:C.dim }}>R$</span>
+                  <input type="number" min="0" step="0.01"
+                    value={niveis[cfg.chave] ?? ""}
+                    onChange={e => setNiveis(prev => ({ ...prev, [cfg.chave]: e.target.value }))}
+                    style={{ width:120, background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8,
+                      color:C.cream, fontFamily:"inherit", fontSize:14, padding:"8px 12px", outline:"none" }}/>
+                </div>
+                <Btn variant="secondary" style={{ fontSize:11, padding:"6px 14px" }}
+                  disabled={saving === cfg.chave}
+                  onClick={() => salvarNivel(cfg.chave)}>
+                  {saving === cfg.chave ? "..." : "Salvar"}
+                </Btn>
               </div>
-              <Btn variant="secondary" style={{ fontSize:11, padding:"6px 14px" }}
-                disabled={saving === cfg.chave}
-                onClick={() => salvarNivel(cfg.chave)}>
-                {saving === cfg.chave ? "..." : "Salvar"}
-              </Btn>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:8, paddingLeft:102 }}>
+                <input type="text" placeholder="Quando aplicar este nível? (ex: times até 20 jogadores)"
+                  value={niveis[chaveDesc] ?? ""}
+                  onChange={e => setNiveis(prev => ({ ...prev, [chaveDesc]: e.target.value }))}
+                  style={{ flex:1, background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8,
+                    color:C.dim, fontFamily:"inherit", fontSize:12, padding:"6px 10px", outline:"none" }}/>
+                <Btn variant="secondary" style={{ fontSize:11, padding:"5px 12px" }}
+                  disabled={saving === chaveDesc}
+                  onClick={() => salvarDescNivel(nivel)}>
+                  {saving === chaveDesc ? "..." : "Salvar desc."}
+                </Btn>
+              </div>
             </div>
           );
         })}
@@ -1281,6 +1308,7 @@ function ModalNivelMensalidade({ time, onClose, onSalvo, show }) {
     api.get(`config_sistema?chave=like.mensalidade_nivel_*&select=*`)
   );
   const [nivel, setNivel] = useState(String(time.nivel_mensalidade || 1));
+  const [obsSuper, setObsSuper] = useState(time.observacao_super || "");
   const [saving, setSaving] = useState(false);
 
   function valorDoNivel(n) {
@@ -1291,7 +1319,7 @@ function ModalNivelMensalidade({ time, onClose, onSalvo, show }) {
   async function salvar() {
     setSaving(true);
     try {
-      await api.patch(`time?id_time=eq.${time.id_time}`, { nivel_mensalidade: Number(nivel) });
+      await api.patch(`time?id_time=eq.${time.id_time}`, { nivel_mensalidade: Number(nivel), observacao_super: obsSuper || null });
       onSalvo();
     } catch(e) { show("Erro: " + e.message, "error"); }
     finally { setSaving(false); }
@@ -1320,9 +1348,16 @@ function ModalNivelMensalidade({ time, onClose, onSalvo, show }) {
             );
           })}
         </div>
+        <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+          <label style={{ fontSize:12, color:C.gold, fontWeight:700 }}>📝 Observação interna (só super admin)</label>
+          <div style={{ fontSize:11, color:C.dim }}>Anotações sobre este time. Nunca visível para os admins do time.</div>
+          <textarea value={obsSuper} onChange={e => setObsSuper(e.target.value)} rows={3}
+            placeholder="Ex: contato pelo WhatsApp, combinou desconto nos 3 primeiros meses..."
+            style={{ background:C.surf2, border:`1px solid ${C.border}`, borderRadius:8, color:C.cream, fontFamily:"inherit", fontSize:13, padding:"9px 12px", outline:"none", resize:"vertical" }}/>
+        </div>
         <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
           <Btn variant="secondary" onClick={onClose}>Cancelar</Btn>
-          <Btn onClick={salvar} disabled={saving}>{saving ? "Salvando..." : "Salvar Nível"}</Btn>
+          <Btn onClick={salvar} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Btn>
         </div>
       </div>
     </Modal>
@@ -1777,7 +1812,7 @@ function AjudaSuper() {
           Guia completo de gestão do sistema: times, mensalidades, solicitações,
           tipos, configurações, permissões e os fluxos do dia a dia.
         </div>
-        <a href="/manual-super.pdf?v=1.0.0" target="_blank" rel="noopener noreferrer"
+        <a href="/manual-super.pdf?v=1.1.0" target="_blank" rel="noopener noreferrer"
           style={{ display:"inline-flex", alignItems:"center", gap:10,
             background:C.gold, color:"#0B3D2E", borderRadius:10,
             padding:"14px 28px", fontFamily:"inherit", fontWeight:800,
@@ -2143,7 +2178,7 @@ function CrudTipoTime({ show }) {
 export default function SuperApp() {
   const [session, setSession] = useState(SESSION_TOKEN ? {access_token: SESSION_TOKEN} : null);
   const [sessaoExpirou, setSessaoExpirou] = useState(false);
-  const APP_VERSION = process.env.REACT_APP_VERSION || "1.0.0";
+  const APP_VERSION = process.env.REACT_APP_VERSION || "1.1.0";
 
   useEffect(() => {
     const handler = () => { setSessaoExpirou(true); setSession(null); };
