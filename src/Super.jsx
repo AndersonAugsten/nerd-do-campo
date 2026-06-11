@@ -337,8 +337,8 @@ function DashboardSuper() {
                     {t.status==="Inativo" ? "🔴 Inativo" : "🟢 Ativo"}
                   </span>
                 </td>
-                <td style={{ padding:"13px 16px" }}>
-                  <span style={{ background:C.gold+"22", color:C.gold, border:`1px solid ${C.gold}44`, borderRadius:6, padding:"2px 10px", fontSize:12, fontWeight:700 }}>
+                <td style={{ padding:"13px 16px", whiteSpace:"nowrap" }}>
+                  <span style={{ background:C.gold+"22", color:C.gold, border:`1px solid ${C.gold}44`, borderRadius:6, padding:"2px 10px", fontSize:12, fontWeight:700, whiteSpace:"nowrap" }}>
                     Nível {t.nivel_mensalidade||1}
                   </span>
                 </td>
@@ -346,9 +346,7 @@ function DashboardSuper() {
                 <td style={{ padding:"13px 16px", color:C.dim }}>{(t.usuario_time||[]).filter(u=>u.role==="admin").length}</td>
                 <td style={{ padding:"13px 16px", color:C.dim, fontSize:13 }}>{t.data_fundacao?new Date(t.data_fundacao).getFullYear():"—"}</td>
                 <td style={{ padding:"13px 16px", color:C.cream, fontSize:13, maxWidth:240 }}>
-                  {t.observacao_super
-                    ? <span title={t.observacao_super} style={{ display:"inline-block", maxWidth:240, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", verticalAlign:"bottom", cursor:"help" }}>📝 {t.observacao_super}</span>
-                    : <span style={{ color:C.dim }}>—</span>}
+                  <CelulaObservacao time={t} show={show} reload={reload} />
                 </td>
                 <td style={{ padding:"13px 16px", display:"flex", gap:6, flexWrap:"wrap" }}>
                   <Btn variant="secondary" style={{ fontSize:11, padding:"5px 12px" }} onClick={()=>{ setTimeSelecionado(t); setModalNovoUser(true); }}>
@@ -1324,6 +1322,51 @@ function ConfigSistema({ show }) {
     </div>
   );
 }
+function CelulaObservacao({ time, show, reload }) {
+  const [editando, setEditando] = React.useState(false);
+  const [valor, setValor] = React.useState(time.observacao_super || "");
+  const [salvando, setSalvando] = React.useState(false);
+
+  React.useEffect(() => { setValor(time.observacao_super || ""); }, [time.observacao_super]);
+
+  async function salvar() {
+    setEditando(false);
+    const novo = valor.trim();
+    if (novo === (time.observacao_super || "")) return; // nada mudou
+    setSalvando(true);
+    try {
+      await api.patch(`time?id_time=eq.${time.id_time}`, { observacao_super: novo || null });
+      show && show("Observação salva!");
+      reload && reload();
+    } catch (e) {
+      show && show("Erro ao salvar: " + e.message, "error");
+    } finally { setSalvando(false); }
+  }
+
+  if (editando) {
+    return (
+      <textarea
+        autoFocus
+        value={valor}
+        disabled={salvando}
+        onChange={e => setValor(e.target.value)}
+        onBlur={salvar}
+        onKeyDown={e => { if (e.key === "Escape") { setValor(time.observacao_super||""); setEditando(false); } }}
+        rows={2}
+        placeholder="Anotação interna..."
+        style={{ width:"100%", minWidth:200, background:C.surf2, border:`1px solid ${C.gold}`, borderRadius:6, color:C.cream, fontFamily:"inherit", fontSize:12, padding:"6px 8px", outline:"none", resize:"vertical" }}
+      />
+    );
+  }
+  return (
+    <div onClick={() => setEditando(true)} title="Clique para editar"
+      style={{ cursor:"text", minHeight:22, maxWidth:240, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+        color: time.observacao_super ? C.cream : C.dim, fontSize:13, padding:"2px 4px", borderRadius:4 }}>
+      {salvando ? "salvando..." : (time.observacao_super ? `📝 ${time.observacao_super}` : "✏️ adicionar")}
+    </div>
+  );
+}
+
 function ModalNivelMensalidade({ time, onClose, onSalvo, show }) {
   const { data: niveis } = useQuery(() =>
     api.get(`config_sistema?chave=like.mensalidade_nivel_*&select=*`)
@@ -2199,7 +2242,7 @@ function CrudTipoTime({ show }) {
 export default function SuperApp() {
   const [session, setSession] = useState(SESSION_TOKEN ? {access_token: SESSION_TOKEN} : null);
   const [sessaoExpirou, setSessaoExpirou] = useState(false);
-  const APP_VERSION = process.env.REACT_APP_VERSION || "1.2.2";
+  const APP_VERSION = process.env.REACT_APP_VERSION || "1.2.4";
 
   useEffect(() => {
     const handler = () => { setSessaoExpirou(true); setSession(null); };
@@ -2224,7 +2267,7 @@ export default function SuperApp() {
           <Btn variant="danger" style={{ fontSize:11, padding:"6px 12px" }} onClick={()=>{ SESSION_TOKEN=null; REFRESH_TOKEN=null; sessionStorage.removeItem("ndc_super_token"); sessionStorage.removeItem("ndc_super_refresh"); setSession(null); }}>Sair</Btn>
         </div>
       </header>
-      <main style={{ maxWidth:1100, margin:"0 auto", padding:"28px 24px" }}>
+      <main style={{ maxWidth:1400, margin:"0 auto", padding:"28px 24px" }}>
         <DashboardSuper/>
       </main>
     </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-const APP_VERSION = process.env.REACT_APP_VERSION || "1.2.2";
+const APP_VERSION = process.env.REACT_APP_VERSION || "1.2.4";
 const UFS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 
 // Paleta de cores do sistema — declarada no topo para evitar "Cannot access 'C' before initialization"
@@ -3823,7 +3823,7 @@ export default function AdminAppCompleto() {
 
   // Verificar manutenção do sistema
   const { data: todosTimesSuper } = useQuery(() =>
-    isSuperadmin ? api.get(`time?select=id_time,nome&order=nome.asc`) : Promise.resolve([]),
+    isSuperadmin ? api.get(`time?select=id_time,nome,observacao_super&order=nome.asc`) : Promise.resolve([]),
     [isSuperadmin]
   );
   const { data: manutCfg, loading: loadManut } = useQuery(() =>
@@ -4065,7 +4065,11 @@ export default function AdminAppCompleto() {
               <select value={idTime||""} onChange={e => { const v=e.target.value; setIdTime(v?Number(v):null); setTemporadaSel(null); setMenu("inicio"); setPartida(null); setNovaPartida(false); }}
                 style={{ background:C.surf2, color: idTime?C.cream:C.gold, border:`1px solid ${idTime?C.border:C.gold}`, borderRadius:8, padding:"6px 10px", fontFamily:"inherit", fontSize:12, fontWeight:700 }}>
                 <option value="">— Selecione um time —</option>
-                {(todosTimesSuper||[]).map(t=><option key={t.id_time} value={t.id_time}>{t.nome}</option>)}
+                {(todosTimesSuper||[]).map(t=>{
+                  const obs = (t.observacao_super||"").trim();
+                  const obsCurta = obs.length > 45 ? obs.slice(0,45)+"…" : obs;
+                  return <option key={t.id_time} value={t.id_time}>{t.nome}{obsCurta ? ` — ${obsCurta}` : ""}</option>;
+                })}
               </select>
             </div>
           )}
