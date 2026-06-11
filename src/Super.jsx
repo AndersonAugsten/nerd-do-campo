@@ -1323,11 +1323,11 @@ function ConfigSistema({ show }) {
   );
 }
 function CelulaObservacao({ time, show, reload }) {
-  const [editando, setEditando] = React.useState(false);
-  const [valor, setValor] = React.useState(time.observacao_super || "");
-  const [salvando, setSalvando] = React.useState(false);
+  const [editando, setEditando] = useState(false);
+  const [valor, setValor] = useState(time.observacao_super || "");
+  const [salvando, setSalvando] = useState(false);
 
-  React.useEffect(() => { setValor(time.observacao_super || ""); }, [time.observacao_super]);
+  useEffect(() => { setValor(time.observacao_super || ""); }, [time.observacao_super]);
 
   async function salvar() {
     setEditando(false);
@@ -2242,7 +2242,7 @@ function CrudTipoTime({ show }) {
 export default function SuperApp() {
   const [session, setSession] = useState(SESSION_TOKEN ? {access_token: SESSION_TOKEN} : null);
   const [sessaoExpirou, setSessaoExpirou] = useState(false);
-  const APP_VERSION = process.env.REACT_APP_VERSION || "1.2.4";
+  const APP_VERSION = process.env.REACT_APP_VERSION || "1.2.5";
 
   useEffect(() => {
     const handler = () => { setSessaoExpirou(true); setSession(null); };
