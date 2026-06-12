@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-const APP_VERSION = process.env.REACT_APP_VERSION || "1.4.4";
+const APP_VERSION = process.env.REACT_APP_VERSION || "1.4.5";
 const UFS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 
 // Paleta de cores do sistema — declarada no topo para evitar "Cannot access 'C' before initialization"
@@ -243,20 +243,26 @@ function BadgeP({ label, cor }) {
 // ══════════════════════════════════════════════════════════════
 
 function fmtDataA(ts) { return ts ? new Date(ts).toLocaleDateString("pt-BR", { timeZone:"UTC" }) : "—"; }
-// valida link de localização: aceita vazio, ou uma URL (com ou sem http://)
-function linkLocalValido(v) {
-  if (!v || !v.trim()) return true; // vazio é permitido (campo opcional)
-  const t = v.trim();
-  // aceita com protocolo, ou sem (completa com https na hora de salvar)
-  const comProtocolo = /^https?:\/\//i.test(t) ? t : `https://${t}`;
-  try { const u = new URL(comProtocolo); return (u.protocol === "http:" || u.protocol === "https:") && !!u.hostname && u.hostname.includes("."); }
-  catch { return false; }
+// valida link de localização: aceita vazio, ou texto que CONTENHA uma URL
+function extrairURL(v) {
+  if (!v) return null;
+  const t = String(v).trim();
+  if (!t) return null;
+  // procura uma URL http(s) dentro do texto
+  const m = t.match(/https?:\/\/[^\s]+/i);
+  if (m) return m[0];
+  // sem protocolo: procura algo tipo dominio.xx/...
+  const m2 = t.match(/[a-z0-9.-]+\.[a-z]{2,}(\/[^\s]*)?/i);
+  if (m2) return `https://${m2[0]}`;
+  return null;
 }
-// normaliza o link para salvar: garante o https:// na frente
+function linkLocalValido(v) {
+  if (!v || !String(v).trim()) return true; // vazio é permitido (campo opcional)
+  return extrairURL(v) !== null;
+}
+// normaliza o link para salvar: extrai a URL e garante o https://
 function normalizarLink(v) {
-  if (!v || !v.trim()) return null;
-  const t = v.trim();
-  return /^https?:\/\//i.test(t) ? t : `https://${t}`;
+  return extrairURL(v); // retorna a URL pronta, ou null se não achar
 }
 function fmtHoraA(ts) { return ts ? new Date(ts).toLocaleTimeString("pt-BR", { hour:"2-digit", minute:"2-digit", timeZone:"UTC" }) : "—"; }
 function resultadoA(p) {
@@ -1454,7 +1460,7 @@ function FormNovaPartida({ temporada, onSalvo, onCancelar, readOnly = false }) {
 
   async function salvar() {
     if (!form.data || !form.id_campo) { show("Preencha a data e o campo.", "error"); return; }
-    if (!linkLocalValido(form.link_local)) { show("O link de localização não é válido. Cole um link completo (começando com http).", "error"); return; }
+    if (!linkLocalValido(form.link_local)) { show(`Link inválido. Recebido: "${String(form.link_local).slice(0,60)}". Cole um link do mapa.`, "error"); return; }
     // Validar que a data está dentro do intervalo da temporada
     if (temporada?.data_inicio && form.data < temporada.data_inicio.split("T")[0]) {
       show(`A data não pode ser anterior ao início da temporada (${temporada.data_inicio.split("T")[0].split("-").reverse().join("/")}).`, "error"); return;
@@ -2008,7 +2014,7 @@ function FichaPartida({ partida: p0, onVoltar, readOnly, idTime, temporada }) {
   const [editDados, setEditDados] = useState(null); // {data, hora, id_campo, link_local} quando editando
   async function salvarDadosPartida() {
     if (!editDados.data) { show("Informe a data.", "error"); return; }
-    if (!linkLocalValido(editDados.link_local)) { show("O link de localização não é válido. Cole um link completo (começando com http).", "error"); return; }
+    if (!linkLocalValido(editDados.link_local)) { show(`Link inválido. Recebido: "${String(editDados.link_local).slice(0,60)}". Cole um link do mapa.`, "error"); return; }
     try {
       const novaData = montarDataHoraUTC(editDados.data, editDados.hora || "12:00");
       const body = {
@@ -4161,7 +4167,7 @@ function CrudEventos({ idTime, show, readOnly }) {
 
   async function salvar() {
     if (!form.nome?.trim()) { show("Informe o nome do evento.", "error"); return; }
-    if (!linkLocalValido(form.link_local)) { show("O link de localização não é válido. Cole um link completo (começando com http).", "error"); return; }
+    if (!linkLocalValido(form.link_local)) { show(`Link inválido. Recebido: "${String(form.link_local).slice(0,60)}". Cole um link do mapa.`, "error"); return; }
     setSaving(true);
     try {
       const body = {
@@ -5675,7 +5681,7 @@ function FichaEncontro({ idTime, temporada, encontro, show, readOnly, onVoltar }
   // ── Salvar cabeçalho (cria o encontro) ──
   async function salvarCabecalho() {
     if (!cabecalho.data) { show("Informe a data do encontro.", "error"); return; }
-    if (!linkLocalValido(cabecalho.link_local)) { show("O link de localização não é válido. Cole um link completo (começando com http).", "error"); return; }
+    if (!linkLocalValido(cabecalho.link_local)) { show(`Link inválido. Recebido: "${String(cabecalho.link_local).slice(0,60)}". Cole um link do mapa.`, "error"); return; }
     setSavingCab(true);
     try {
       const _dataHora = montarDataHoraUTC(cabecalho.data, cabecalho.hora || "12:00");
