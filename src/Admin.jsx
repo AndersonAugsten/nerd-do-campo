@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-const APP_VERSION = process.env.REACT_APP_VERSION || "1.4.1";
+const APP_VERSION = process.env.REACT_APP_VERSION || "1.4.2";
 const UFS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 
 // Paleta de cores do sistema — declarada no topo para evitar "Cannot access 'C' before initialization"
@@ -1996,6 +1996,23 @@ function CompartilharPresenca({ tipo, idRef, idTime, titulo, data, local, linkLo
 
 function FichaPartida({ partida: p0, onVoltar, readOnly, idTime, temporada }) {
   const [partida, setPartida] = useState(p0);
+  const [editDados, setEditDados] = useState(null); // {data, hora, id_campo, link_local} quando editando
+  async function salvarDadosPartida() {
+    if (!editDados.data) { show("Informe a data.", "error"); return; }
+    if (!linkLocalValido(editDados.link_local)) { show("O link de localização não é válido. Cole um link completo (começando com http).", "error"); return; }
+    try {
+      const novaData = montarDataHoraUTC(editDados.data, editDados.hora || "12:00");
+      const body = {
+        data: novaData,
+        id_campo: editDados.id_campo ? Number(editDados.id_campo) : null,
+        link_local: editDados.link_local?.trim() || null,
+      };
+      await api.patch(`partida?id_partida=eq.${partida.id_partida}`, body);
+      setPartida(u => ({ ...u, ...body }));
+      setEditDados(null);
+      show("Dados do jogo atualizados!");
+    } catch (e) { show(e.message, "error"); }
+  }
   const { toast, show } = useToast();
 
   const { data: jogadores }     = useQuery(() => idTime ? api.get(`jogador?id_jogador=gt.0&id_time=eq.${idTime}&select=*,posicao(nome)&order=camisa.asc`) : Promise.resolve([]), [idTime]);
@@ -2007,6 +2024,7 @@ function FichaPartida({ partida: p0, onVoltar, readOnly, idTime, temporada }) {
   const minhaCidade = meuTime?.cidade; // {nome, estado, latitude, longitude}
   const { data: posicoes }      = useQuery(() => meuTipoPosicoes ? api.get(`posicao?id_tipo_time=eq.${meuTipoPosicoes}&select=*&order=ordem.asc`) : Promise.resolve([]), [meuTipoPosicoes]);
   const { data: advsFicha } = useQuery(() => idTime ? api.get(`adversario?id_time=eq.${idTime}&select=id_adversario,nome&order=nome.asc`) : Promise.resolve([]), [idTime]);
+  const { data: camposFicha } = useQuery(() => idTime ? api.get(`campo?id_time=eq.${idTime}&select=id_campo,nome&order=nome.asc`) : Promise.resolve([]), [idTime]);
   // Raio ajustável na tela (inicia com o padrão do time; ajuste é temporário, não salva)
   const [raioKm, setRaioKm] = useState(null);
   useEffect(() => { if (meuTime?.raio_busca_km != null && raioKm === null) setRaioKm(meuTime.raio_busca_km); }, [meuTime]);
@@ -2200,6 +2218,9 @@ function FichaPartida({ partida: p0, onVoltar, readOnly, idTime, temporada }) {
             )}
             {!cancelada && (
               <ConvocarPartida partida={partida} time={meuTimeData?.[0]} idTime={idTime} show={show}/>
+            )}
+            {!cancelada && !readOnly && (
+              <Btn variant="secondary" style={{ fontSize: 11, padding: "6px 12px" }} onClick={()=>setEditDados({ data: dataDeTS(partida.data), hora: horaDeTS(partida.data), id_campo: partida.id_campo ? String(partida.id_campo) : "", link_local: partida.link_local || "" })}>📅 Editar dados</Btn>
             )}
             {!cancelada && (
               <Btn variant="danger" style={{ fontSize: 11, padding: "6px 12px" }} onClick={cancelarPartida}>Cancelar Partida</Btn>
@@ -2443,6 +2464,25 @@ function FichaPartida({ partida: p0, onVoltar, readOnly, idTime, temporada }) {
       })()}
 
       {/* Modais */}
+      {editDados && (
+        <Modal title="Editar dados do jogo" onClose={() => setEditDados(null)}>
+          <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+              <Input label="Data" type="date" value={editDados.data} onChange={e=>setEditDados(d=>({...d, data:e.target.value}))}/>
+              <Input label="Horário" type="time" value={editDados.hora} onChange={e=>setEditDados(d=>({...d, hora:e.target.value}))}/>
+            </div>
+            <Select label="Campo" value={editDados.id_campo} onChange={e=>setEditDados(d=>({...d, id_campo:e.target.value}))}>
+              <option value="">Sem campo definido</option>
+              {(camposFicha||[]).map(c=><option key={c.id_campo} value={c.id_campo}>{c.nome}</option>)}
+            </Select>
+            <Input label="Link de localização (opcional)" placeholder="https://maps.google.com/..." value={editDados.link_local} onChange={e=>setEditDados(d=>({...d, link_local:e.target.value}))}/>
+            <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+              <Btn variant="secondary" onClick={()=>setEditDados(null)}>Cancelar</Btn>
+              <Btn onClick={salvarDadosPartida}>Salvar</Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
       {modalAdv && (
         <Modal title={partida.id_adversario || p0.id_adversario ? "Trocar ou Remover Adversário" : "Definir Adversário"} onClose={() => setModalAdv(false)}>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
